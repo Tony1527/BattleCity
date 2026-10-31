@@ -133,6 +133,45 @@ def test_phase_transitions_flash_and_then_fade():
     assert match.phase_flash > 0.0
 
 
+def test_in_update_phase_change_keeps_its_flash_under_large_dt():
+    match = boss.Boss()
+    world = FakeWorld()
+    match.hp = int(match.max_hp * 0.60)
+
+    match.update(10.0, world)
+
+    assert match.phase == 2
+    assert match.phase_flash == pytest.approx(config.BOSS_PHASE_FLASH)
+
+
+def test_attack_timers_keep_overshoot_without_double_scheduling():
+    world = FakeWorld([make_player()])
+    match = boss.Boss()
+    match.radial_timer = 999.0
+    match.aim_timer = -0.1
+
+    match.update(0.0, world)
+    assert match.aim_timer == pytest.approx(config.BOSS_AIM_INTERVAL[0] - 0.1)
+
+    match = boss.Boss()
+    match.radial_timer = 999.0
+    match.aim_timer = -5.0
+    match.update(10.0, world)
+
+    aimed = [attack for attack in match.telegraphs if attack.kind == "aimed"]
+    assert len(aimed) == 1
+    assert match.aim_timer == pytest.approx(config.BOSS_AIM_INTERVAL[0])
+
+
+def test_take_damage_returns_false_and_keeps_boss_alive_when_not_lethal():
+    match = boss.Boss()
+
+    assert match.take_damage(1) is False
+    assert match.hp == config.BOSS_HP - 1
+    assert match.alive is True
+    assert match.phase == 1
+
+
 def test_take_damage_kills_at_zero_and_stops_all_attacks():
     match = boss.Boss()
     world = FakeWorld([make_player()])
@@ -175,6 +214,28 @@ def test_aimed_attack_fires_at_the_nearest_player_after_a_telegraph():
     assert target == player.center
     assert speed == config.BOSS_BULLET_SPEED
     assert damage == config.BOSS_BULLET_DAMAGE
+
+
+def test_aimed_attacks_alternate_between_player_and_base_while_alive():
+    player = make_player(tile=(12, 10))
+    world = FakeWorld([player])
+    match = boss.Boss()
+
+    telegraph = trigger(match, world, "aim_timer")
+    assert match.telegraph_target == player.center
+    match.update(telegraph, world)
+
+    match.aim_timer = 0.0
+    match.update(0.0, world)
+    assert match.telegraph_target == world.base.center
+    match.update(match.telegraph, world)
+
+    match.aim_timer = 0.0
+    match.update(0.0, world)
+    assert match.telegraph_target == player.center
+
+    assert world.aimed[0][1] == player.center
+    assert world.aimed[1][1] == world.base.center
 
 
 def test_aimed_attack_targets_the_base_when_no_player_is_alive():
@@ -243,6 +304,30 @@ def test_phase_two_laser_telegraphs_for_at_least_point_eight_seconds():
     origin, direction = world.lasers[0]
     assert origin == match.center
     assert direction == config.Direction.DOWN
+
+
+def test_phase_two_laser_alternates_to_the_base_while_player_is_alive():
+    player = make_player(tile=(20, 2))
+    world = FakeWorld([player])
+    match = boss.Boss()
+    damage_to_ratio(match, 0.60)
+    match.update(0.0, world)
+    match.aim_timer = 999.0
+    match.radial_timer = 999.0
+
+    match.laser_timer = 0.0
+    match.update(0.0, world)
+    assert match.telegraph_direction == config.Direction.RIGHT
+    match.update(match.telegraph, world)
+
+    match.laser_timer = 0.0
+    match.update(0.0, world)
+    assert match.telegraph_target == world.base.center
+    assert match.telegraph_direction == config.Direction.DOWN
+    match.update(match.telegraph, world)
+
+    assert world.lasers[0][1] == config.Direction.RIGHT
+    assert world.lasers[1][1] == config.Direction.DOWN
 
 
 def test_phase_one_never_schedules_a_laser():

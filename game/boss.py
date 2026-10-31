@@ -42,6 +42,8 @@ class Boss:
         self.drift_direction = 1
         self._pending: list[_PendingAttack] = []
         self._entered_phase = 1
+        self._aimed_shots = 0
+        self._laser_shots = 0
 
     @property
     def rect(self) -> pygame.Rect:
@@ -94,8 +96,8 @@ class Boss:
         if not self.alive or dt < 0.0:
             return
 
-        self._sync_phase(world)
         self.phase_flash = max(0.0, self.phase_flash - dt)
+        self._sync_phase(world)
         self._drift(dt, world)
         self._tick_telegraphs(dt, world)
         self._tick_attack_timers(dt, world)
@@ -153,12 +155,17 @@ class Boss:
         self.aim_timer -= dt
         if self.aim_timer <= 0.0:
             self._schedule_aimed(world)
-            self.aim_timer = config.BOSS_AIM_INTERVAL[self.phase - 1]
+            self.aim_timer = self._retime(
+                self.aim_timer, config.BOSS_AIM_INTERVAL[self.phase - 1]
+            )
 
         self.radial_timer -= dt
         if self.radial_timer <= 0.0:
             self._schedule_radial()
-            self.radial_timer = config.BOSS_RADIAL_INTERVAL[self.phase - 1]
+            self.radial_timer = self._retime(
+                self.radial_timer,
+                config.BOSS_RADIAL_INTERVAL[self.phase - 1],
+            )
 
         if self.phase >= 2:
             if self.laser_timer is None:
@@ -168,12 +175,20 @@ class Boss:
             self.laser_timer -= dt
             if self.laser_timer <= 0.0:
                 self._schedule_laser(world)
-                self.laser_timer = config.BOSS_LASER_INTERVAL[
-                    self.phase - 1
-                ]
+                self.laser_timer = self._retime(
+                    self.laser_timer,
+                    config.BOSS_LASER_INTERVAL[self.phase - 1],
+                )
+
+    @staticmethod
+    def _retime(timer: float, interval: float) -> float:
+        timer += interval
+        return timer if timer > 0.0 else interval
 
     def _schedule_aimed(self, world) -> None:
-        target = self._pick_target(world)
+        self._aimed_shots += 1
+        aim_base = self._aimed_shots % config.BOSS_AIM_BASE_EVERY == 0
+        target = self._pick_target(world, aim_base)
         if target is None:
             target = self.center + pygame.Vector2(0, 4 * config.TILE)
         self._pending.append(
@@ -188,7 +203,9 @@ class Boss:
         )
 
     def _schedule_laser(self, world) -> None:
-        target = self._pick_target(world)
+        self._laser_shots += 1
+        aim_base = self._laser_shots % config.BOSS_LASER_BASE_EVERY == 0
+        target = self._pick_target(world, aim_base)
         if target is None:
             direction = config.Direction.DOWN
         else:
@@ -203,7 +220,14 @@ class Boss:
             )
         )
 
-    def _pick_target(self, world) -> pygame.Vector2 | None:
+    def _pick_target(
+        self, world, prefer_base: bool = False
+    ) -> pygame.Vector2 | None:
+        base = getattr(world, "base", None)
+        base_alive = base is not None and getattr(base, "alive", True)
+        if prefer_base and base_alive:
+            return pygame.Vector2(base.center)
+
         living = [
             player
             for player in world.players
@@ -218,8 +242,7 @@ class Boss:
             )
             return pygame.Vector2(nearest.center)
 
-        base = getattr(world, "base", None)
-        if base is not None and getattr(base, "alive", True):
+        if base_alive:
             return pygame.Vector2(base.center)
         return None
 
