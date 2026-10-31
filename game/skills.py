@@ -5,7 +5,7 @@ import math
 import pygame
 
 import config
-from game.geometry import in_bounds, point_to_tile
+from game.geometry import in_bounds, point_to_tile, tile_rect
 
 
 class Cooldown:
@@ -123,6 +123,22 @@ class LaserBeam:
         self.life = max(0.0, self.life - dt)
 
 
+def _tile_face_distance(
+    origin: pygame.Vector2,
+    direction: config.Direction,
+    tile_x: int,
+    tile_y: int,
+) -> float:
+    rect = tile_rect(tile_x, tile_y)
+    if direction == config.Direction.RIGHT:
+        return rect.left - origin.x
+    if direction == config.Direction.LEFT:
+        return origin.x - rect.right
+    if direction == config.Direction.DOWN:
+        return rect.top - origin.y
+    return origin.y - rect.bottom
+
+
 def compute_laser(
     origin: tuple[float, float] | pygame.Vector2,
     direction: config.Direction,
@@ -133,13 +149,16 @@ def compute_laser(
     direction = config.Direction(direction)
     dx, dy = direction.vector
     unit = pygame.Vector2(dx, dy)
-    limit = min(float(max_range), config.LASER_MAX_SAMPLES * config.LASER_SAMPLE_STEP)
+    step = config.LASER_SAMPLE_STEP
+    sample_count = min(
+        math.ceil(float(max_range) / step), config.LASER_MAX_SAMPLES
+    )
+    limit = min(float(max_range), sample_count * step)
     brick_tile: tuple[int, int] | None = None
     distance = 0.0
 
-    sample_count = math.ceil(limit / config.LASER_SAMPLE_STEP)
     for sample in range(1, sample_count + 1):
-        distance = min(sample * config.LASER_SAMPLE_STEP, limit)
+        distance = min(sample * step, limit)
         tile_x, tile_y = point_to_tile(origin + unit * distance)
         if not in_bounds(tile_x, tile_y):
             break
@@ -147,6 +166,9 @@ def compute_laser(
         if tile != config.Tile.EMPTY:
             if tile == config.Tile.BRICK:
                 brick_tile = (tile_x, tile_y)
+            distance = max(
+                0.0, _tile_face_distance(origin, direction, tile_x, tile_y)
+            )
             break
     else:
         distance = limit
