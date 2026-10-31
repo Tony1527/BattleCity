@@ -231,6 +231,18 @@ def test_friendly_bullets_damage_enemies():
     assert world.bullets == []
 
 
+def test_bullets_resolve_before_enemies_move():
+    world = open_world()
+    enemy = make_enemy("tracker", (5, 5))
+    world.enemies.append(enemy)
+    bullet = Bullet(enemy.center, config.Direction.RIGHT, friendly=True)
+    world.bullets.append(bullet)
+
+    world.update(0.5, [])
+
+    assert enemy.hp == enemy.max_hp - 1
+
+
 def test_destroyed_player_consumes_shared_life_and_respawns_invulnerable():
     world = open_world()
     player = world.players[0]

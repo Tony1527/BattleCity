@@ -179,8 +179,8 @@ class World:
             player.update_timers(dt)
         self._respawn_players()
         self._update_players(dt, player_inputs)
-        self._update_enemies(dt)
         self._update_bullets(dt)
+        self._update_enemies(dt)
         self.enemies = [enemy for enemy in self.enemies if enemy.alive]
         self._check_defeat()
 
