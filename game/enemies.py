@@ -48,7 +48,7 @@ def _line_is_clear(
         tile = world.point_to_tile(point)
         if tile in (start_tile, end_tile):
             continue
-        if world.is_brick(*tile):
+        if world.is_brick(*tile) or world.is_steel(*tile):
             return False
     return True
 
@@ -71,6 +71,17 @@ def _nearest_entrance(world, pos: pygame.Vector2):
         return None
     return min(
         entrances,
+        key=lambda tile: _distance_squared(
+            pos, world.tile_center(*tile)
+        ),
+    )
+
+
+def _nearest_base_tile(world, pos: pygame.Vector2):
+    if not config.BASE_TILES:
+        return None
+    return min(
+        config.BASE_TILES,
         key=lambda tile: _distance_squared(
             pos, world.tile_center(*tile)
         ),
@@ -187,7 +198,10 @@ class Enemy:
         if entrance is None:
             return
 
-        target = world.tile_center(*entrance)
+        base_tile = _nearest_base_tile(world, self.pos)
+        if base_tile is None:
+            return
+        target = world.tile_center(*base_tile)
         direction = _aligned_direction(self.pos, target)
         if (
             direction is not None
@@ -216,7 +230,10 @@ class Enemy:
             entrance = _nearest_entrance(world, self.pos)
             if entrance is None:
                 return
-            target = world.tile_center(*entrance)
+            base_tile = _nearest_base_tile(world, self.pos)
+            if base_tile is None:
+                return
+            target = world.tile_center(*base_tile)
             direction = _aligned_direction(self.pos, target)
             if (
                 direction is not None
@@ -241,15 +258,19 @@ class Enemy:
 
     def _reposition_goal(self, world, player) -> tuple[int, int]:
         player_tile = world.point_to_tile(player.center)
-        for radius in range(4, 7):
+        current = world.point_to_tile(self.pos)
+        for radius in range(
+            config.GUNNER_PREFERRED_MIN,
+            config.GUNNER_PREFERRED_MAX + 1,
+        ):
             candidates = []
             for dx in range(-radius, radius + 1):
                 dy = radius - abs(dx)
                 for offset_y in (dy, -dy):
                     tile = (player_tile[0] + dx, player_tile[1] + offset_y)
-                    if not in_bounds(*tile):
+                    if tile == current or not in_bounds(*tile):
                         continue
-                    if world.is_brick(*tile):
+                    if world.is_brick(*tile) or world.is_steel(*tile):
                         continue
                     candidates.append(tile)
             if candidates:
@@ -259,6 +280,15 @@ class Enemy:
                         self.pos, world.tile_center(*tile)
                     ),
                 )
+
+        for direction in config.Direction:
+            dx, dy = direction.vector
+            tile = (current[0] + dx, current[1] + dy)
+            if not in_bounds(*tile):
+                continue
+            if world.is_brick(*tile) or world.is_steel(*tile):
+                continue
+            return tile
         return player_tile
 
     def _behave_demolisher(self, dt: float, world) -> None:
@@ -269,6 +299,7 @@ class Enemy:
             if self.telegraph <= 0.0:
                 self.telegraph = 0.0
                 world.demolisher_blast(self)
+                self.alive = False
             return
 
         self.telegraph = 0.0
@@ -335,10 +366,11 @@ class EliteEnemy(Enemy):
         if not self.alive or amount <= 0:
             return False
 
-        absorbed = min(self.shield, amount)
-        self.shield -= absorbed
-        amount -= absorbed
-        self.shield_timer = config.ELITE_SHIELD_REGEN
+        if self.shield > 0:
+            absorbed = min(self.shield, amount)
+            self.shield -= absorbed
+            amount -= absorbed
+            self.shield_timer = config.ELITE_SHIELD_REGEN
         if amount == 0:
             return False
 
@@ -348,10 +380,21 @@ class EliteEnemy(Enemy):
             return True
         return False
 
+    def _spread_directions(
+        self, direction: config.Direction
+    ) -> list[config.Direction]:
+        count = max(1, config.ELITE_SPREAD_SHOTS)
+        half = count // 2
+        directions = [
+            config.Direction(
+                (direction.value + offset) % len(config.Direction)
+            )
+            for offset in range(-half, half + 1)
+        ]
+        return directions[:count]
+
     def _emit_fire(self, world, direction: config.Direction) -> None:
-        left = config.Direction((direction.value - 1) % len(config.Direction))
-        right = config.Direction((direction.value + 1) % len(config.Direction))
-        for shot in (left, direction, right):
+        for shot in self._spread_directions(direction):
             world.enemy_fire(self, shot)
 
     def _behave(self, dt: float, world) -> None:
@@ -361,10 +404,20 @@ class EliteEnemy(Enemy):
 
     def _update_shield(self, dt: float) -> None:
         self.shield_timer -= dt
-        while self.shield_timer <= 0.0:
-            if self.shield < config.ELITE_SHIELD:
-                self.shield += 1
-            self.shield_timer += config.ELITE_SHIELD_REGEN
+        if self.shield_timer > 0.0:
+            return
+
+        interval = config.ELITE_SHIELD_REGEN
+        if interval <= 0.0:
+            self.shield = min(config.ELITE_SHIELD, self.shield + 1)
+            self.shield_timer = 0.0
+            return
+
+        ticks = int((-self.shield_timer) // interval) + 1
+        self.shield = min(
+            config.ELITE_SHIELD, self.shield + ticks
+        )
+        self.shield_timer += ticks * interval
 
     def _update_summons(self, dt: float, world) -> None:
         self.summon_timer -= dt
@@ -397,7 +450,9 @@ class EliteEnemy(Enemy):
         allowed = [
             tile
             for tile in candidates
-            if in_bounds(*tile) and not world.is_brick(*tile)
+            if in_bounds(*tile)
+            and not world.is_brick(*tile)
+            and not world.is_steel(*tile)
         ]
         return allowed or [(tx, ty)]
 

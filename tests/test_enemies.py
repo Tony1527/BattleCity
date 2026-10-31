@@ -12,11 +12,13 @@ class FakeWorld:
         self,
         players=(),
         bricks=(),
+        steel=(),
         path=None,
         base_entrances=None,
     ):
         self.players = list(players)
         self.bricks = set(bricks)
+        self.steel = set(steel)
         self.path = None if path is None else list(path)
         self.base_entrances = tuple(
             config.BASE_ENTRANCES
@@ -39,6 +41,9 @@ class FakeWorld:
 
     def is_brick(self, tx, ty):
         return (tx, ty) in self.bricks
+
+    def is_steel(self, tx, ty):
+        return (tx, ty) in self.steel
 
     def find_path(self, start, goal):
         if self.path is not None:
@@ -173,7 +178,7 @@ def test_elite_summons_two_trackers_and_never_more_than_cap_alive():
 
 def test_tracker_fires_at_base_when_the_line_of_sight_is_clear():
     world = FakeWorld()
-    tracker = enemies.make_enemy("tracker", (11, 5))
+    tracker = enemies.make_enemy("tracker", (11, 7))
 
     tracker.update(0.1, world)
 
@@ -184,8 +189,17 @@ def test_tracker_fires_at_base_when_the_line_of_sight_is_clear():
 
 
 def test_tracker_does_not_fire_at_base_through_a_brick():
-    world = FakeWorld(bricks={(11, 7)})
-    tracker = enemies.make_enemy("tracker", (11, 5))
+    world = FakeWorld(bricks={(11, 9)})
+    tracker = enemies.make_enemy("tracker", (11, 7))
+
+    tracker.update(0.1, world)
+
+    assert world.shots == []
+
+
+def test_tracker_does_not_fire_at_base_through_steel():
+    world = FakeWorld(steel={(11, 9)})
+    tracker = enemies.make_enemy("tracker", (11, 7))
 
     tracker.update(0.1, world)
 
@@ -215,6 +229,10 @@ def test_demolisher_telegraphs_then_blasts_a_nearby_player():
 
     demolisher.update(config.DEMOLISHER_TELEGRAPH / 2, world)
     assert world.blasts == [demolisher]
+    assert demolisher.alive is False
+
+    demolisher.update(config.DEMOLISHER_TELEGRAPH, world)
+    assert world.blasts == [demolisher]
 
 
 def test_demolisher_blasts_when_within_range_of_a_base_entrance():
@@ -223,6 +241,10 @@ def test_demolisher_blasts_when_within_range_of_a_base_entrance():
 
     demolisher.update(config.DEMOLISHER_TELEGRAPH, world)
 
+    assert world.blasts == [demolisher]
+    assert demolisher.alive is False
+
+    demolisher.update(config.DEMOLISHER_TELEGRAPH, world)
     assert world.blasts == [demolisher]
 
 
@@ -281,8 +303,11 @@ def test_elite_fires_a_three_shot_spread():
 
     directions = [direction for _, direction in world.shots]
     assert len(directions) == config.ELITE_SPREAD_SHOTS
-    assert config.Direction.DOWN in directions
-    assert len(set(directions)) == config.ELITE_SPREAD_SHOTS
+    assert set(directions) == {
+        config.Direction.RIGHT,
+        config.Direction.DOWN,
+        config.Direction.LEFT,
+    }
     assert elite.fire_timer == pytest.approx(
         config.ENEMY_SPECS["gunner"].fire_interval
     )
@@ -339,3 +364,101 @@ def test_follow_path_returns_none_when_current_tile_is_the_last_waypoint():
 
     assert enemies.follow_path(enemy, world, [(2, 2), (3, 2)], 0.1) is None
     assert world.moves == []
+
+
+def test_make_enemy_rejects_unknown_kind():
+    with pytest.raises(ValueError):
+        enemies.make_enemy("unknown", (0, 0))
+
+
+def test_dead_enemy_update_does_nothing():
+    world = FakeWorld()
+    tracker = enemies.make_enemy("tracker", (11, 7))
+    tracker.alive = False
+
+    tracker.update(1.0, world)
+
+    assert world.shots == []
+    assert world.moves == []
+    assert tracker.fire_timer == 0.0
+
+
+def test_fire_timer_suppresses_an_immediate_second_shot():
+    world = FakeWorld()
+    tracker = enemies.make_enemy("tracker", (11, 7))
+
+    tracker.update(0.1, world)
+    assert len(world.shots) == 1
+
+    tracker.update(0.1, world)
+    assert len(world.shots) == 1
+
+
+def test_elite_shield_timer_resets_only_when_shield_absorbs_damage():
+    elite = enemies.make_enemy("elite", (4, 5))
+    world = FakeWorld()
+
+    elite.shield = 0
+    elite.shield_timer = 1.0
+    assert elite.take_damage(1, world) is False
+    assert elite.shield_timer == 1.0
+
+    elite.shield = 2
+    elite.shield_timer = 1.0
+    assert elite.take_damage(1, world) is False
+    assert elite.shield_timer == config.ELITE_SHIELD_REGEN
+
+
+@pytest.mark.parametrize(
+    ("kind", "tile", "expected"),
+    [
+        ("tracker", (10, 11), config.Direction.RIGHT),
+        ("gunner", (13, 11), config.Direction.LEFT),
+    ],
+)
+def test_base_targeting_from_side_entrances_aims_at_a_base_tile(
+    kind, tile, expected
+):
+    world = FakeWorld()
+    enemy = enemies.make_enemy(kind, tile)
+
+    enemy.update(0.1, world)
+
+    assert world.shots == [(enemy, expected)]
+
+
+@pytest.mark.parametrize("kind", ["gunner", "elite"])
+def test_gunner_repositions_from_a_diagonal_ring_tile(kind):
+    player = make_player(tile=(2, 2))
+    world = FakeWorld(players=[player], bricks={(4, 4)})
+    enemy = enemies.make_enemy(kind, (5, 5))
+
+    enemy.update(0.1, world)
+
+    assert world.shots == []
+    assert world.moves
+
+
+@pytest.mark.parametrize("kind", ["gunner", "elite"])
+def test_gunner_repositions_from_a_brick_blocked_ring_tile(kind):
+    player = make_player(tile=(5, 0))
+    world = FakeWorld(players=[player], bricks={(5, 2)})
+    enemy = enemies.make_enemy(kind, (5, 5))
+
+    enemy.update(0.1, world)
+
+    assert world.shots == []
+    assert world.moves
+
+
+def test_elite_summons_never_target_steel_tiles():
+    elite = enemies.make_enemy("elite", (4, 5))
+    world = FakeWorld(
+        steel={(4, 4), (5, 5), (4, 6), (3, 5)}
+    )
+    elite.summon_timer = 0.0
+
+    elite.update(0.0, world)
+
+    assert len(world.spawns) == config.ELITE_MAX_SUMMONS
+    assert all(tile not in world.steel for _, tile in world.spawns)
