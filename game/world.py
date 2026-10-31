@@ -74,9 +74,7 @@ class World:
 
         self.base = Base(config.BASE_TILES)
         self.shared_lives = config.SHARED_LIVES + sum(
-            stats.extra_lives
-            for stats in self.player_stats
-            if stats.extra_lives > 0
+            stats.extra_lives for stats in self.player_stats
         )
         self.base.reset_for_level(
             sum(stats.base_shield for stats in self.player_stats)
@@ -501,6 +499,8 @@ class World:
         return False
 
     def _check_defeat(self) -> None:
+        if self.status != "playing":
+            return
         if not self.base.alive:
             self.status = "lost"
             return
