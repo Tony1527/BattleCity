@@ -82,6 +82,16 @@ def make_player(tile=(5, 5)):
     return player
 
 
+def ring_tiles(center, min_radius, max_radius):
+    tiles = set()
+    for radius in range(min_radius, max_radius + 1):
+        for dx in range(-radius, radius + 1):
+            dy = radius - abs(dx)
+            for offset_y in (dy, -dy):
+                tiles.add((center[0] + dx, center[1] + offset_y))
+    return tiles
+
+
 @pytest.mark.parametrize("kind", ["tracker", "gunner", "demolisher"])
 def test_make_enemy_builds_configured_specs(kind):
     enemy = enemies.make_enemy(kind, (4, 5))
@@ -462,3 +472,50 @@ def test_elite_summons_never_target_steel_tiles():
 
     assert len(world.spawns) == config.ELITE_MAX_SUMMONS
     assert all(tile not in world.steel for _, tile in world.spawns)
+
+
+@pytest.mark.parametrize("kind", ["gunner", "elite"])
+def test_gunner_does_not_freeze_when_current_tile_is_the_only_ring_goal(
+    kind,
+):
+    player = make_player(tile=(5, 5))
+    current = (5, 9)
+    steel = ring_tiles(
+        (5, 5),
+        config.GUNNER_PREFERRED_MIN,
+        config.GUNNER_PREFERRED_MAX,
+    )
+    steel.discard(current)
+    world = FakeWorld(players=[player], bricks={(5, 7)}, steel=steel)
+    enemy = enemies.make_enemy(kind, current)
+    start = pygame.Vector2(enemy.pos)
+
+    enemy.update(0.1, world)
+
+    assert world.shots == []
+    assert world.moves
+    assert enemy.direction == config.Direction.UP
+    assert enemy.pos.y < start.y
+
+
+@pytest.mark.parametrize("kind", ["gunner", "elite"])
+def test_gunner_adjacent_fallback_uses_an_adjacent_tile(kind):
+    player = make_player(tile=(5, 5))
+    current = (7, 7)
+    steel = ring_tiles(
+        (5, 5),
+        config.GUNNER_PREFERRED_MIN,
+        config.GUNNER_PREFERRED_MAX,
+    )
+    steel.discard(current)
+    steel.update({(7, 6), (6, 6)})
+    world = FakeWorld(players=[player], steel=steel)
+    enemy = enemies.make_enemy(kind, current)
+    start = pygame.Vector2(enemy.pos)
+
+    enemy.update(0.1, world)
+
+    assert world.shots == []
+    assert world.moves
+    assert enemy.direction == config.Direction.LEFT
+    assert enemy.pos.x < start.x
