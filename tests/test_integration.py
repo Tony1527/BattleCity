@@ -82,6 +82,56 @@ def test_all_eight_levels_construct_validate_and_update() -> None:
         assert world.elapsed == pytest.approx(2.0)
 
 
+def test_full_run_normal_and_hell_construct_all_levels() -> None:
+    for mode in ("normal", "hell"):
+        for level_index in range(config.LEVEL_COUNT):
+            world = World(
+                level_index, seed=3000 + level_index, difficulty=mode
+            )
+
+            assert world.difficulty.key == mode
+            assert world.base.max_hp == (
+                config.BASE_HP_HELL
+                if mode == "hell"
+                else config.BASE_HP_NORMAL
+            )
+            assert validate_level(world.level)
+            assert (
+                world.elite_target_count == config.ELITE_COUNTS[level_index]
+            )
+            assert len(world.traps) == config.TRAP_COUNTS[level_index]
+
+            for _ in range(120):
+                world.update(
+                    1 / 60, [PlayerInput() for _ in world.players]
+                )
+
+            assert world.elapsed == pytest.approx(2.0)
+
+
+def test_retry_flow_and_language_switch(game: Game) -> None:
+    start_playing(game)
+    old_world = game.world
+
+    game.world.status = "lost"
+    game.update(1 / 60)
+    assert game.state == "gameover"
+
+    game.handle_event(key_event(config.CONFIRM_KEY))
+    assert game.state == "playing"
+    assert game.level_index == 0
+    assert game.world is not old_world
+    assert game.world.level_index == 0
+
+    game.handle_event(key_event(config.PAUSE_KEY))
+    assert game.state == "paused"
+
+    before = game.language
+    game.handle_event(key_event(pygame.K_l))
+    assert game.language != before
+    assert game.renderer.language == game.language
+
+
 def test_full_transition_from_title_to_boss_victory(game: Game) -> None:
     assert game.state == "title"
 
@@ -257,5 +307,24 @@ def test_requirements_and_readme_document_the_workflow() -> None:
         "精英关 2",
         "最终 Boss",
         "跳过该关升级",
+        "## 难度",
+        "## 关卡与敌人",
+        "## 地形、陷阱与补给",
+        "## 语言",
+        "## 失败与重试",
+        "## 字体与许可",
+        "地狱",
+        "精英数量",
+        "按 `L`",
+        "重试当前关卡",
+        "河流",
+        "桥",
+        "陷阱",
+        "维修",
+        "强化",
+        "无敌",
+        "NotoSansCJKsc-Regular-subset.otf",
+        "assets/fonts/OFL.txt",
+        "SIL Open Font License 1.1",
     ):
         assert token in readme

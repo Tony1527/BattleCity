@@ -169,6 +169,25 @@ def test_river_and_bridge_constants_match_spec():
     assert config.BRIDGE_WIDTH == 2
 
 
+def test_trap_and_pickup_constants_match_spec():
+    assert config.TRAP_COUNTS == (2, 2, 3, 3, 4, 4, 5, 2)
+    assert len(config.TRAP_COUNTS) == config.LEVEL_COUNT
+    assert config.TRAP_DURATION == 3.0
+    assert config.TRAP_REARM_TIME == 5.0
+    assert config.ITEM_INITIAL_DELAY == 5.0
+    assert config.ITEM_SPAWN_INTERVAL == (16.0, 22.0)
+    assert config.ITEM_MAX_ON_MAP == 2
+    assert config.ITEM_TTL == 25.0
+    assert config.ITEM_WEIGHTS == {
+        "repair": 74,
+        "stim": 25,
+        "invincible": 1,
+    }
+    assert config.ITEM_REPAIR_AMOUNT == 1
+    assert config.ITEM_STIM_DURATION == 20.0
+    assert config.ITEM_INVINCIBLE_DURATION == 6.0
+
+
 def test_keymap_defaults():
     assert config.KEYMAP[0]["skill"] == pygame.K_f
     assert config.KEYMAP[0]["shoot"] == pygame.K_SPACE
