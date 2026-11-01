@@ -390,6 +390,9 @@ class World:
         ):
             self.damage_base(config.BOSS_BULLET_DAMAGE)
 
+        self.effects.burst(beam.end, config.HOLO_WHITE, count=8)
+        self.effects.shake(3.0)
+
     def _damage_boss(self, amount: int) -> bool:
         if self.boss is None or not self.boss.alive or amount <= 0:
             return False
@@ -403,9 +406,6 @@ class World:
             )
             self.effects.shake(1.5)
         return destroyed
-
-        self.effects.burst(beam.end, config.HOLO_WHITE, count=8)
-        self.effects.shake(3.0)
 
     def spawn_enemy(
         self,

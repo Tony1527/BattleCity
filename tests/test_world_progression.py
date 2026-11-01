@@ -354,6 +354,39 @@ def test_grenade_damages_and_can_kill_the_boss():
     assert other.hp == other_hp
 
 
+def test_grenade_split_points_damage_the_boss_only_once():
+    world = combat_world(config.BOSS_LEVEL)
+    boss = world.boss
+
+    grenade = Grenade(
+        boss.center,
+        config.Direction.RIGHT,
+        damage=100,
+        radius=200.0,
+        split=3,
+    )
+    grenade.target = pygame.Vector2(boss.center)
+    assert len(grenade.explosion_points()) > 1
+
+    world.resolve_grenade(grenade)
+
+    assert boss.hp == boss.max_hp - 100
+    assert world.status == "playing"
+
+
+def test_boss_laser_emits_holo_burst_and_shake():
+    world = combat_world(config.BOSS_LEVEL)
+    boss = world.boss
+
+    world.boss_laser(boss.center, config.Direction.DOWN)
+
+    assert any(
+        particle.color == config.HOLO_WHITE
+        for particle in world.effects.particles
+    )
+    assert world.effects.shake_amount > 0.0
+
+
 def test_laser_damages_boss_once_and_can_trigger_victory():
     world = combat_world(config.BOSS_LEVEL)
     boss = world.boss
