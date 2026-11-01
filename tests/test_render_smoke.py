@@ -280,6 +280,13 @@ def test_draw_world_handles_eliminated_players_and_dead_base(screen):
         )
         > 20
     )
+    destroyed_x_color = (226, 72, 72)
+    assert (
+        count_color_in_rect(
+            screen, world.base.rect, destroyed_x_color, tolerance=4
+        )
+        > 20
+    )
 
 
 def test_enemy_counter_uses_boss_label_only_while_alive(screen):
@@ -346,6 +353,7 @@ def test_draw_world_handles_skills_and_enemies(screen):
     elite = next(enemy for enemy in world.enemies if enemy.kind == "elite")
     grenade = world.grenades[-1]
     laser = world.lasers[-1]
+    world.effects.shake_amount = 0.0
     renderer = render.Renderer(screen)
 
     renderer.draw_world(world)
@@ -360,6 +368,49 @@ def test_draw_world_handles_skills_and_enemies(screen):
             screen, reticle_rect, reticle_color, tolerance=4
         )
         > 20
+    )
+
+    arc_t = 0.75
+    arc_x = grenade.start.x + (target.x - grenade.start.x) * arc_t
+    arc_y = grenade.start.y + (target.y - grenade.start.y) * arc_t
+    arc_y -= (
+        4.0
+        * config.GRENADE_ARC_HEIGHT
+        * arc_t
+        * (1.0 - arc_t)
+    )
+    arc_rect = pygame.Rect(int(arc_x) - 5, int(arc_y) - 5, 11, 11)
+    arc_color = render._scale(config.P2_AMBER, 0.7)
+    assert (
+        count_color_in_rect(screen, arc_rect, arc_color, tolerance=6)
+        >= 5
+    )
+
+    ring_radius = int(config.DEMOLISHER_BLAST_RADIUS)
+    demolisher_center = (
+        int(demolisher.pos.x),
+        int(demolisher.pos.y),
+    )
+    ring_region = pygame.Rect(
+        demolisher_center[0] - ring_radius - 12,
+        demolisher_center[1] - ring_radius - 12,
+        ring_radius * 2 + 24,
+        ring_radius * 2 + 24,
+    )
+    ring_inner = pygame.Rect(
+        demolisher_center[0] - 40,
+        demolisher_center[1] - 40,
+        80,
+        80,
+    )
+    assert (
+        count_pixels_in_rect(
+            screen,
+            ring_region,
+            is_warning_orange,
+            exclude=ring_inner,
+        )
+        > 50
     )
 
     midpoint = laser.origin.lerp(laser.end, 0.5)
