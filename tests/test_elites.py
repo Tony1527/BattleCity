@@ -73,7 +73,7 @@ def test_elite_x_is_faster_than_a_regular_elite():
     assert isinstance(elite_x, EliteXEnemy)
     assert elite_x.kind == "elite_x"
     assert elite_x.speed == pytest.approx(
-        elite.speed * config.ELITE_X_SPEED_MULT
+        config.ENEMY_SPECS["gunner"].speed * 2.0
     )
     assert elite_x.max_hp == elite.max_hp
     assert elite_x.shield == elite.shield
@@ -101,3 +101,14 @@ def test_elite_x_blocks_clear_until_killed():
     elite_x.alive = False
     world.update(0.0, [])
     assert world.status == "cleared"
+
+
+def test_elite_x_fires_one_bullet_without_spread():
+    world = World(0, seed=11)
+    elite_x = make_enemy("elite_x", (5, 5))
+    world.enemies = [elite_x]
+    before = len(world.bullets)
+
+    elite_x._emit_fire(world, config.Direction.DOWN)
+
+    assert len(world.bullets) == before + 1

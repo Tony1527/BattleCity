@@ -550,6 +550,9 @@ class EliteXEnemy(EliteEnemy):
         self.kind = "elite_x"
         self.speed *= config.ELITE_X_SPEED_MULT
 
+    def _emit_fire(self, world, direction: config.Direction) -> None:
+        world.enemy_fire(self, direction)
+
 
 def make_enemy(
     kind: str,

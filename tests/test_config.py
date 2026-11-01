@@ -53,7 +53,7 @@ def test_spawns_and_level_progression_constants():
     assert config.ELITE_COUNTS == (1, 1, 2, 2, 2, 3, 3, 1)
     assert len(config.ELITE_COUNTS) == config.LEVEL_COUNT
     assert config.ELITE_X_LEVELS == (0, 1, 2, 3, 4, 5, 6)
-    assert config.ELITE_X_SPEED_MULT == 1.3
+    assert config.ELITE_X_SPEED_MULT == 2.0
     assert len(config.ENEMY_QUOTA) == config.LEVEL_COUNT
     assert len(config.MAX_ACTIVE_ENEMIES) == config.LEVEL_COUNT
     assert len(config.SPAWN_INTERVAL) == config.LEVEL_COUNT
