@@ -176,5 +176,12 @@ def test_requirements_and_readme_document_the_workflow() -> None:
         "docs/superpowers/specs/2026-10-31-battlecity-design.md",
         "docs/superpowers/plans/2026-10-31-battlecity.md",
         "不依赖任何外部图片或音频素材",
+        "3 个普通关",
+        "2 个普通关",
+        "5 个普通关",
+        "精英关 1",
+        "精英关 2",
+        "最终 Boss",
+        "跳过该关升级",
     ):
         assert token in readme
