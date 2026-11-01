@@ -390,6 +390,20 @@ class World:
         ):
             self.damage_base(config.BOSS_BULLET_DAMAGE)
 
+    def _damage_boss(self, amount: int) -> bool:
+        if self.boss is None or not self.boss.alive or amount <= 0:
+            return False
+
+        destroyed = self.boss.take_damage(amount)
+        if destroyed:
+            self._on_boss_dead()
+        else:
+            self.effects.burst(
+                self.boss.center, config.ENEMY_ORANGE, count=5
+            )
+            self.effects.shake(1.5)
+        return destroyed
+
         self.effects.burst(beam.end, config.HOLO_WHITE, count=8)
         self.effects.shake(3.0)
 
@@ -397,7 +411,7 @@ class World:
         self,
         kind: str,
         tile: tuple[int, int] | None = None,
-    ) -> Enemy:
+    ) -> Enemy | None:
         if tile is not None and (
             self.is_steel(*tile) or self._tile_occupied(*tile)
         ):
@@ -406,19 +420,21 @@ class World:
             tile = self._choose_spawn_tile()
         if tile is None:
             tile = self._fallback_spawn_tile()
+        if tile is None:
+            return None
         enemy = make_enemy(kind, tile)
         self.enemies.append(enemy)
         return enemy
 
-    def _fallback_spawn_tile(self) -> tuple[int, int]:
-        for ty in range(config.GRID_ROWS):
-            for tx in range(config.GRID_COLS):
+    def _fallback_spawn_tile(self) -> tuple[int, int] | None:
+        for ty in range(1, config.GRID_ROWS - 1):
+            for tx in range(1, config.GRID_COLS - 1):
                 if self.is_steel(tx, ty):
                     continue
                 if self._tile_occupied(tx, ty):
                     continue
                 return (tx, ty)
-        return self.random.choice(config.ENEMY_SPAWNS)
+        return None
 
     def _tile_occupied(self, tx: int, ty: int) -> bool:
         tile = tile_rect(tx, ty)
@@ -548,6 +564,18 @@ class World:
                     enemy.center, config.ENEMY_ORANGE, count=5
                 )
 
+        if (
+            self.boss is not None
+            and self.boss.alive
+            and point_near_segment(
+                self.boss.center,
+                beam.origin,
+                beam.end,
+                config.LASER_HIT_TOLERANCE,
+            )
+        ):
+            self._damage_boss(stats.laser_damage)
+
         self.effects.shake(2.0)
         self._check_progression()
         return True
@@ -560,6 +588,7 @@ class World:
         points = grenade.explosion_points()
         hit_enemies: set[int] = set()
         hit_players: set[int] = set()
+        hit_boss = False
         player_damage = round(
             grenade.damage * config.GRENADE_FRIENDLY_FACTOR
         )
@@ -587,6 +616,15 @@ class World:
                     self.effects.burst(
                         enemy.center, config.ENEMY_ORANGE, count=5
                     )
+
+            if (
+                not hit_boss
+                and self.boss is not None
+                and self.boss.alive
+                and point.distance_to(self.boss.center) <= grenade.radius
+            ):
+                hit_boss = True
+                self._damage_boss(grenade.damage)
 
             for player in self.players:
                 if not player.alive or player.eliminated:
@@ -639,8 +677,15 @@ class World:
             laser for laser in self.lasers if laser.life > 0.0
         ]
 
+    def _clear_boss_arena(self) -> None:
+        for ty in range(1, 5):
+            for tx in range(9, 15):
+                if in_bounds(tx, ty):
+                    self.grid[ty][tx] = config.Tile.EMPTY
+
     def _start_level(self) -> None:
         if self.level_index == config.BOSS_LEVEL:
+            self._clear_boss_arena()
             self.boss = Boss()
             self.quota_remaining = 0
             self.spawn_quota = 0
@@ -666,7 +711,8 @@ class World:
         if tile is None:
             return None
         enemy = self.spawn_enemy("elite", tile)
-        self.elite_spawned = True
+        if enemy is not None:
+            self.elite_spawned = True
         return enemy
 
     def _active_enemy_count(self) -> int:
@@ -698,9 +744,13 @@ class World:
 
         tile = self._choose_spawn_tile()
         if tile is None:
+            tile = self._fallback_spawn_tile()
+        if tile is None:
             return
 
-        self.spawn_enemy(self._choose_enemy_kind(), tile)
+        enemy = self.spawn_enemy(self._choose_enemy_kind(), tile)
+        if enemy is None:
+            return
         self.quota_remaining -= 1
         self.spawn_quota = self.quota_remaining
         self.spawn_timer = self._spawn_interval()
@@ -709,6 +759,9 @@ class World:
         if self.status != "playing":
             return
         self.status = "victory"
+        for enemy in self.enemies:
+            enemy.alive = False
+        self.enemies = []
         if self.boss is not None:
             self.effects.burst(self.boss.center, config.ENEMY_RED, count=48)
             self.effects.burst(

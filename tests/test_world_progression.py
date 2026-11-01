@@ -7,6 +7,7 @@ from game.entities import Bullet
 from game.enemies import EliteEnemy, make_enemy
 from game.geometry import tile_center
 from game.levelgen import validate_level
+from game.skills import Grenade
 from game.world import World
 
 
@@ -179,7 +180,7 @@ def test_explicit_spawn_on_steel_reroutes_to_a_safe_tile():
     assert not world.is_steel(*world.point_to_tile(enemy.center))
 
 
-def test_no_spawn_happens_when_every_spawn_tile_is_steel():
+def test_all_steel_spawn_points_fall_back_to_a_non_steel_interior_tile():
     world = wave_world(0)
     world.quota_remaining = 5
     world.spawn_quota = 5
@@ -190,8 +191,39 @@ def test_no_spawn_happens_when_every_spawn_tile_is_steel():
 
     world._update_spawning(10.0)
 
+    assert len(world.enemies) == 1
+    spawn_tile = world.point_to_tile(world.enemies[0].center)
+    assert spawn_tile not in config.ENEMY_SPAWNS
+    assert not world.is_steel(*spawn_tile)
+    assert world.quota_remaining == 4
+
+
+def test_no_spawn_when_no_non_steel_interior_tile_exists():
+    world = wave_world(0)
+    world.quota_remaining = 5
+    world.spawn_quota = 5
+    world.spawn_timer = 0.0
+    world.grid = [
+        [config.Tile.STEEL for _ in range(config.GRID_COLS)]
+        for _ in range(config.GRID_ROWS)
+    ]
+    world.level.grid = world.grid
+
+    world._update_spawning(10.0)
+
     assert world.enemies == []
     assert world.quota_remaining == 5
+
+
+def test_explicit_spawn_returns_none_when_no_non_steel_tile_exists():
+    world = wave_world(0)
+    world.grid = [
+        [config.Tile.STEEL for _ in range(config.GRID_COLS)]
+        for _ in range(config.GRID_ROWS)
+    ]
+    world.level.grid = world.grid
+
+    assert world.spawn_enemy("tracker", config.ENEMY_SPAWNS[0]) is None
 
 
 def test_remaining_enemies_counts_living_pending_and_the_boss():
@@ -249,6 +281,135 @@ def test_boss_bullet_kill_sets_victory_and_emits_particles():
     assert not boss.alive
     assert world.status == "victory"
     assert world.effects.particles != []
+
+
+def test_boss_death_clears_minions_and_zeroes_remaining_enemies():
+    world = combat_world(config.BOSS_LEVEL)
+    minion = make_enemy("tracker", (6, 6))
+    world.enemies = [minion]
+    assert world.remaining_enemies == 2
+
+    world.boss.take_damage(world.boss.max_hp)
+    world.update(0.0, [])
+
+    assert world.status == "victory"
+    assert not minion.alive
+    assert world.remaining_enemies == 0
+
+
+def test_boss_arena_is_cleared_at_spawn():
+    world = World(config.BOSS_LEVEL, seed=13)
+    boss = world.boss
+    assert boss is not None
+    boss_tile = world.point_to_tile(boss.center)
+    assert not world.is_steel(*boss_tile)
+    assert not world.is_brick(*boss_tile)
+
+    for ty in range(1, 5):
+        for tx in range(9, 15):
+            assert world.grid[ty][tx] == config.Tile.EMPTY
+
+    assert world.grid[0][12] == config.Tile.STEEL
+    assert world.grid[config.GRID_ROWS - 1][5] == config.Tile.STEEL
+
+    world.boss_laser(boss.center, config.Direction.DOWN)
+    assert world.lasers[-1].length > 0.0
+
+
+def test_grenade_damages_and_can_kill_the_boss():
+    world = combat_world(config.BOSS_LEVEL)
+    boss = world.boss
+    player = world.players[0]
+    other = world.players[1]
+    base_hp = world.base.hp
+    player_hp = player.hp
+    other_hp = other.hp
+
+    grenade = Grenade(
+        boss.center,
+        config.Direction.RIGHT,
+        damage=100,
+        radius=config.TILE,
+    )
+    grenade.target = pygame.Vector2(boss.center)
+    world.resolve_grenade(grenade)
+
+    assert boss.hp == boss.max_hp - 100
+    assert world.status == "playing"
+
+    lethal = Grenade(
+        boss.center,
+        config.Direction.RIGHT,
+        damage=boss.hp,
+        radius=config.TILE,
+    )
+    lethal.target = pygame.Vector2(boss.center)
+    world.resolve_grenade(lethal)
+
+    assert not boss.alive
+    assert world.status == "victory"
+    assert world.remaining_enemies == 0
+    assert world.base.hp == base_hp
+    assert player.hp == player_hp
+    assert other.hp == other_hp
+
+
+def test_laser_damages_boss_once_and_can_trigger_victory():
+    world = combat_world(config.BOSS_LEVEL)
+    boss = world.boss
+    player = world.players[0]
+    other = world.players[1]
+    player.pos = pygame.Vector2(boss.center.x, tile_center(12, 5).y)
+    player.direction = config.Direction.UP
+    base_hp = world.base.hp
+    other_hp = other.hp
+
+    assert world.fire_laser(player)
+    assert boss.hp == boss.max_hp - player.stats.laser_damage
+    assert world.base.hp == base_hp
+    assert other.hp == other_hp
+
+    shots = 1
+    while boss.alive and shots < 20:
+        player.laser_timer = 0.0
+        assert world.fire_laser(player)
+        shots += 1
+
+    assert not boss.alive
+    assert world.status == "victory"
+    assert world.remaining_enemies == 0
+    assert world.base.hp == base_hp
+    assert other.hp == other_hp
+
+
+def test_elite_summons_can_exceed_wave_cap_but_respect_summon_cap():
+    world = wave_world(3)
+    elite = next(
+        enemy for enemy in world.enemies if isinstance(enemy, EliteEnemy)
+    )
+    elite.pos = tile_center(5, 5)
+    world.max_active = 1
+    elite.summon_timer = 0.0
+
+    elite.update(0.0, world)
+
+    summons = [
+        enemy
+        for enemy in world.enemies
+        if enemy is not elite and enemy.alive
+    ]
+    assert len(summons) == config.ELITE_MAX_SUMMONS
+    assert world.remaining_enemies > world.max_active
+
+    elite.summon_timer = 0.0
+    elite.update(0.0, world)
+
+    summons = [
+        enemy
+        for enemy in world.enemies
+        if enemy is not elite and enemy.alive
+    ]
+    assert len(summons) == config.ELITE_MAX_SUMMONS
 
 
 def test_enemy_fire_at_aims_a_bullet_that_damages_a_player():
