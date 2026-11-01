@@ -114,6 +114,8 @@ class Player:
         self.grenade_timer = 0.0
         self.laser_timer = 0.0
         self.immobilized = 0.0
+        self.stim_timer = 0.0
+        self.invincible_timer = 0.0
         self.damage_residual = 0.0
 
     @property
@@ -140,6 +142,8 @@ class Player:
         self.grenade_timer = max(0.0, self.grenade_timer - dt)
         self.laser_timer = max(0.0, self.laser_timer - dt)
         self.immobilized = max(0.0, self.immobilized - dt)
+        self.stim_timer = max(0.0, self.stim_timer - dt)
+        self.invincible_timer = max(0.0, self.invincible_timer - dt)
 
     def can_shoot(self) -> bool:
         return (
@@ -153,7 +157,12 @@ class Player:
         self.fire_timer = self.stats.fire_interval
 
     def take_damage(self, amount: int) -> bool:
-        if not self.alive or self.invuln > 0 or amount <= 0:
+        if (
+            not self.alive
+            or self.invuln > 0
+            or self.invincible_timer > 0
+            or amount <= 0
+        ):
             return False
 
         reduced = (

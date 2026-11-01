@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections import deque
 
 import pygame
 
@@ -16,6 +17,7 @@ from game.hazards import Trap
 from game.input import PlayerInput
 from game.levelgen import Level, generate_level
 from game.pathfinding import astar
+from game.pickups import Pickup, roll_pickup_kind
 from game.skills import Grenade, compute_laser, point_near_segment
 from game.upgrades import apply_upgrade as _apply_upgrade
 
@@ -61,6 +63,11 @@ class World:
         self.traps: list[Trap] = [
             Trap(tile) for tile in self.level.traps
         ]
+        self.pickups: list[Pickup] = []
+        self.pickup_timer = config.ITEM_INITIAL_DELAY
+        self.pickup_rng = random.Random(
+            f"{self.seed}:{self.level_index}:pickups"
+        )
 
         self.status = "playing"
         self.elapsed = 0.0
@@ -269,6 +276,131 @@ class World:
             entity.immobilized = config.TRAP_DURATION
             return
 
+    def _update_pickups(self, dt: float) -> None:
+        step = max(0.0, dt)
+        self.pickups = [
+            pickup for pickup in self.pickups if pickup.update(step)
+        ]
+
+        for player in self.players:
+            if not player.alive or player.eliminated:
+                continue
+            for pickup in list(self.pickups):
+                if not player.rect.colliderect(pickup.rect):
+                    continue
+                if self._apply_pickup(player, pickup):
+                    self.pickups.remove(pickup)
+
+        if self.status != "playing":
+            return
+
+        self.pickup_timer -= step
+        if self.pickup_timer > 0.0:
+            return
+        if len(self.pickups) < config.ITEM_MAX_ON_MAP:
+            self._spawn_pickup()
+        self.pickup_timer = self.pickup_rng.uniform(
+            *config.ITEM_SPAWN_INTERVAL
+        )
+
+    def _apply_pickup(self, player: Player, pickup: Pickup) -> bool:
+        if player is None or not player.alive or player.eliminated:
+            return False
+        if pickup.kind == "repair":
+            if player.hp >= player.max_hp:
+                return False
+            player.hp = min(
+                player.max_hp, player.hp + config.ITEM_REPAIR_AMOUNT
+            )
+            return True
+        if pickup.kind == "stim":
+            player.stim_timer = config.ITEM_STIM_DURATION
+            return True
+        if pickup.kind == "invincible":
+            player.invincible_timer = config.ITEM_INVINCIBLE_DURATION
+            return True
+        return False
+
+    def _spawn_pickup(self) -> Pickup | None:
+        candidates = self._pickup_candidate_tiles()
+        if not candidates:
+            return None
+        tx, ty = self.pickup_rng.choice(candidates)
+        pickup = Pickup(roll_pickup_kind(self.pickup_rng), tile_center(tx, ty))
+        self.pickups.append(pickup)
+        return pickup
+
+    def _pickup_candidate_tiles(self) -> list[tuple[int, int]]:
+        protected = self._pickup_protected_cells()
+        trapped = {trap.tile for trap in self.traps}
+        taken = {self.point_to_tile(pickup.pos) for pickup in self.pickups}
+        reachable = self._pickup_reachable_tiles()
+
+        candidates: list[tuple[int, int]] = []
+        for ty in range(1, config.GRID_ROWS - 1):
+            for tx in range(1, config.GRID_COLS - 1):
+                if self.grid[ty][tx] != config.Tile.EMPTY:
+                    continue
+                tile = (tx, ty)
+                if tile not in reachable:
+                    continue
+                if tile in protected or tile in trapped or tile in taken:
+                    continue
+                if self._pickup_near_base(tile):
+                    continue
+                if self._tile_occupied(tx, ty):
+                    continue
+                candidates.append(tile)
+        return candidates
+
+    def _pickup_protected_cells(self) -> set[tuple[int, int]]:
+        cells = set(config.BASE_TILES) | set(config.BASE_ENTRANCES)
+        radius = config.SPAWN_SAFE_RADIUS
+        for sx, sy in (*config.ENEMY_SPAWNS, *config.PLAYER_SPAWNS):
+            for dy in range(-radius, radius + 1):
+                for dx in range(-radius, radius + 1):
+                    if in_bounds(sx + dx, sy + dy):
+                        cells.add((sx + dx, sy + dy))
+        return cells
+
+    def _pickup_near_base(self, tile: tuple[int, int]) -> bool:
+        tx, ty = tile
+        margin = config.ITEM_BASE_MARGIN
+        return any(
+            abs(tx - bx) <= margin and abs(ty - by) <= margin
+            for bx, by in config.BASE_TILES
+        )
+
+    def _pickup_reachable_tiles(self) -> set[tuple[int, int]]:
+        walkable = (config.Tile.EMPTY, config.Tile.BRIDGE)
+        reachable: set[tuple[int, int]] = set()
+        queue: deque[tuple[int, int]] = deque()
+
+        for spawn in config.PLAYER_SPAWNS:
+            if spawn in reachable:
+                continue
+            if not in_bounds(*spawn):
+                continue
+            if self.grid[spawn[1]][spawn[0]] not in walkable:
+                continue
+            reachable.add(spawn)
+            queue.append(spawn)
+
+        while queue:
+            tx, ty = queue.popleft()
+            for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+                neighbor = (tx + dx, ty + dy)
+                if neighbor in reachable:
+                    continue
+                nx, ny = neighbor
+                if not in_bounds(nx, ny):
+                    continue
+                if self.grid[ny][nx] not in walkable:
+                    continue
+                reachable.add(neighbor)
+                queue.append(neighbor)
+        return reachable
+
     def update(
         self,
         dt: float,
@@ -293,6 +425,7 @@ class World:
             player.update_timers(dt)
         self._respawn_players()
         self._update_players(dt, player_inputs)
+        self._update_pickups(dt)
         self._update_bullets(dt)
         if self.status != "playing":
             return
