@@ -9,9 +9,13 @@ from game.geometry import tile_rect
 
 
 class Base:
-    def __init__(self, tiles: Iterable[tuple[int, int]] = config.BASE_TILES):
+    def __init__(
+        self,
+        tiles: Iterable[tuple[int, int]] = config.BASE_TILES,
+        max_hp: int = config.BASE_HP,
+    ):
         self.tiles = tuple(tiles)
-        self.max_hp = config.BASE_HP
+        self.max_hp = max_hp
         self.hp = self.max_hp
         self.shield = 0
         self.alive = True

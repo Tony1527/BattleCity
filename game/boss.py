@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import pygame
@@ -17,7 +18,12 @@ class _PendingAttack:
 
 
 class Boss:
-    def __init__(self, pos: tuple[float, float] | pygame.Vector2 | None = None):
+    def __init__(
+        self,
+        pos: tuple[float, float] | pygame.Vector2 | None = None,
+        hp_mult: float = 1.0,
+        interval_mult: float = 1.0,
+    ):
         rect = config.PLAYFIELD_RECT
         if pos is None:
             pos = (
@@ -26,7 +32,9 @@ class Boss:
             )
 
         self.pos = pygame.Vector2(pos)
-        self.max_hp = config.BOSS_HP
+        self.hp_mult = hp_mult
+        self.interval_mult = interval_mult
+        self.max_hp = math.ceil(config.BOSS_HP * hp_mult)
         self.hp = self.max_hp
         self.phase = 1
         self.alive = True
@@ -36,8 +44,8 @@ class Boss:
         self.telegraph_direction: config.Direction | None = None
         self.phase_flash = 0.0
 
-        self.aim_timer = config.BOSS_AIM_INTERVAL[0]
-        self.radial_timer = config.BOSS_RADIAL_INTERVAL[0]
+        self.aim_timer = self._interval(config.BOSS_AIM_INTERVAL[0])
+        self.radial_timer = self._interval(config.BOSS_RADIAL_INTERVAL[0])
         self.laser_timer: float | None = None
         self.drift_direction = 1
         self._pending: list[_PendingAttack] = []
@@ -115,13 +123,17 @@ class Boss:
     def _enter_phase(self, world, phase: int) -> None:
         self._entered_phase = phase
         self.aim_timer = min(
-            self.aim_timer, config.BOSS_AIM_INTERVAL[phase - 1]
+            self.aim_timer,
+            self._interval(config.BOSS_AIM_INTERVAL[phase - 1]),
         )
         self.radial_timer = min(
-            self.radial_timer, config.BOSS_RADIAL_INTERVAL[phase - 1]
+            self.radial_timer,
+            self._interval(config.BOSS_RADIAL_INTERVAL[phase - 1]),
         )
         if phase >= 2:
-            self.laser_timer = config.BOSS_LASER_INTERVAL[phase - 1]
+            self.laser_timer = self._interval(
+                config.BOSS_LASER_INTERVAL[phase - 1]
+            )
             self._summon(
                 world, config.BOSS_TRANSITION_SUMMONS[phase - 1]
             )
@@ -156,7 +168,8 @@ class Boss:
         if self.aim_timer <= 0.0:
             self._schedule_aimed(world)
             self.aim_timer = self._retime(
-                self.aim_timer, config.BOSS_AIM_INTERVAL[self.phase - 1]
+                self.aim_timer,
+                self._interval(config.BOSS_AIM_INTERVAL[self.phase - 1]),
             )
 
         self.radial_timer -= dt
@@ -164,21 +177,28 @@ class Boss:
             self._schedule_radial()
             self.radial_timer = self._retime(
                 self.radial_timer,
-                config.BOSS_RADIAL_INTERVAL[self.phase - 1],
+                self._interval(
+                    config.BOSS_RADIAL_INTERVAL[self.phase - 1]
+                ),
             )
 
         if self.phase >= 2:
             if self.laser_timer is None:
-                self.laser_timer = config.BOSS_LASER_INTERVAL[
-                    self.phase - 1
-                ]
+                self.laser_timer = self._interval(
+                    config.BOSS_LASER_INTERVAL[self.phase - 1]
+                )
             self.laser_timer -= dt
             if self.laser_timer <= 0.0:
                 self._schedule_laser(world)
                 self.laser_timer = self._retime(
                     self.laser_timer,
-                    config.BOSS_LASER_INTERVAL[self.phase - 1],
+                    self._interval(
+                        config.BOSS_LASER_INTERVAL[self.phase - 1]
+                    ),
                 )
+
+    def _interval(self, interval: float) -> float:
+        return interval * self.interval_mult
 
     @staticmethod
     def _retime(timer: float, interval: float) -> float:

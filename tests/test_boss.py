@@ -1,3 +1,4 @@
+import math
 import random
 
 import pygame
@@ -69,6 +70,49 @@ def test_config_has_the_pinned_boss_values():
     assert config.BOSS_SPEED == 32
     assert config.BOSS_SIZE == 96
     assert config.BOSS_PHASE_THRESHOLDS == (0.66, 0.33)
+
+
+def test_boss_hp_multiplier_rounds_up_and_starts_at_full_health():
+    match = boss.Boss(hp_mult=1.5)
+
+    assert match.max_hp == math.ceil(config.BOSS_HP * 1.5)
+    assert match.hp == match.max_hp
+
+
+def test_boss_interval_multiplier_scales_initial_and_recurring_timers():
+    world = FakeWorld([make_player()])
+    match = boss.Boss(interval_mult=0.85)
+
+    assert match.aim_timer == pytest.approx(
+        config.BOSS_AIM_INTERVAL[0] * 0.85
+    )
+    assert match.radial_timer == pytest.approx(
+        config.BOSS_RADIAL_INTERVAL[0] * 0.85
+    )
+
+    match.radial_timer = 999.0
+    match.aim_timer = 0.0
+    match.update(0.0, world)
+
+    assert match.aim_timer == pytest.approx(
+        config.BOSS_AIM_INTERVAL[0] * 0.85
+    )
+
+    damage_to_ratio(match, 0.60)
+    match.update(0.0, world)
+
+    assert match.laser_timer == pytest.approx(
+        config.BOSS_LASER_INTERVAL[1] * 0.85
+    )
+
+    match.aim_timer = 999.0
+    match.radial_timer = 999.0
+    match.laser_timer = 0.0
+    match.update(0.0, world)
+
+    assert match.laser_timer == pytest.approx(
+        config.BOSS_LASER_INTERVAL[1] * 0.85
+    )
 
 
 def test_boss_starts_at_full_health_in_phase_one_at_top_center():

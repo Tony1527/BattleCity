@@ -7,6 +7,7 @@ import pygame
 
 import config
 from game.boss import Boss
+from game.difficulty import get_profile, scaled_enemy_spec
 from game.effects import Effects
 from game.enemies import Enemy, make_enemy
 from game.entities import Base, Bullet, Player
@@ -45,8 +46,10 @@ class World:
         seed: int | None = None,
         player_stats: list[config.PlayerStats] | None = None,
         upgrade_levels: list[dict[str, int]] | None = None,
+        difficulty: str = "normal",
     ) -> None:
         self.level_index = int(level_index)
+        self.difficulty = get_profile(difficulty)
         self.seed = self.level_index if seed is None else int(seed)
         self.random = random.Random(self.seed)
         self.level: Level = generate_level(self.seed)
@@ -93,7 +96,9 @@ class World:
             )
             self.upgrade_levels.append(dict(levels))
 
-        self.base = Base(config.BASE_TILES)
+        self.base = Base(
+            config.BASE_TILES, max_hp=self.difficulty.base_hp
+        )
         self.shared_lives = config.SHARED_LIVES + sum(
             stats.extra_lives for stats in self.player_stats
         )
@@ -430,7 +435,14 @@ class World:
             tile = self._fallback_spawn_tile()
         if tile is None:
             return None
-        enemy = make_enemy(kind, tile)
+        if kind in config.ENEMY_SPECS:
+            enemy = Enemy(
+                kind,
+                tile_center(*tile),
+                spec=scaled_enemy_spec(kind, self.difficulty),
+            )
+        else:
+            enemy = make_enemy(kind, tile)
         self.enemies.append(enemy)
         return enemy
 
@@ -708,7 +720,10 @@ class World:
     def _start_level(self) -> None:
         if self.level_index == config.BOSS_LEVEL:
             self._clear_boss_arena()
-            self.boss = Boss()
+            self.boss = Boss(
+                hp_mult=self.difficulty.boss_hp_mult,
+                interval_mult=self.difficulty.boss_interval_mult,
+            )
             self.quota_remaining = 0
             self.spawn_quota = 0
             self.max_active = 0
@@ -741,7 +756,10 @@ class World:
         return sum(1 for enemy in self.enemies if enemy.alive)
 
     def _spawn_interval(self) -> float:
-        return _level_value(config.SPAWN_INTERVAL, self.level_index, 0.0)
+        return (
+            _level_value(config.SPAWN_INTERVAL, self.level_index, 0.0)
+            * self.difficulty.spawn_interval_mult
+        )
 
     def _choose_enemy_kind(self) -> str:
         if self.level_index <= 1:

@@ -57,6 +57,21 @@ def test_spawns_and_level_progression_constants():
     assert config.ENEMY_QUOTA[config.BOSS_LEVEL] == 0
 
 
+def test_difficulty_and_spawn_constants_match_spec():
+    assert config.SPAWN_INTERVAL == (
+        4.8,
+        4.4,
+        4.0,
+        3.6,
+        3.2,
+        2.8,
+        2.4,
+        0.0,
+    )
+    assert config.BASE_HP_NORMAL == 3
+    assert config.BASE_HP_HELL == 6
+
+
 def test_player_stats_defaults_match_spec():
     stats = config.PlayerStats()
     assert stats.max_hp == 3
