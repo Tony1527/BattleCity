@@ -187,10 +187,10 @@ def test_roll_upgrades_filters_offers_by_player_role():
     }
 
 
-def test_reactive_armor_stacks_to_nine_and_floors_at_four_seconds():
+def test_reactive_armor_stacks_to_seven_and_floors_at_four_seconds():
     stats = config.PlayerStats()
     levels = {}
-    for _ in range(9):
+    for _ in range(7):
         assert upgrades.apply_upgrade(stats, levels, "reactive_armor") is True
-    assert stats.reactive_armor_stacks == 9
+    assert stats.reactive_armor_stacks == 7
     assert upgrades.apply_upgrade(stats, levels, "reactive_armor") is False

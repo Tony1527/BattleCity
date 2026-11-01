@@ -62,7 +62,7 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
         "reactive_armor_stacks",
         "add",
         1,
-        9,
+        7,
     ),
     Upgrade(
         "rapid_loader",
