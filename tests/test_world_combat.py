@@ -72,10 +72,10 @@ def test_grenade_damages_enemies_fully_players_at_thirty_five_percent_and_never_
 
     world.resolve_grenade(grenade)
 
-    player_damage = round(40 * config.GRENADE_FRIENDLY_FACTOR)
+    assert config.GRENADE_FRIENDLY_FACTOR == 0.35
     assert enemy.hp == 100 - 40
-    assert thrower.hp == 50 - player_damage
-    assert ally.hp == 50 - player_damage
+    assert thrower.hp == 50 - 14
+    assert ally.hp == 50 - 14
     assert world.base.hp == config.BASE_HP
     assert world.base.alive
 
@@ -135,10 +135,76 @@ def test_grenade_split_creates_the_configured_number_of_explosions():
     minus.hp = 100
     world.enemies = [plus, minus]
 
+    assert len(grenade.explosion_points()) == 1 + grenade.split
+
     world.resolve_grenade(grenade)
 
     assert plus.hp == 60
     assert minus.hp == 60
+
+
+def test_overlapping_explosion_points_damage_an_enemy_only_once():
+    world = open_world()
+    target = tile_center(5, 5)
+    grenade = Grenade(
+        target,
+        config.Direction.RIGHT,
+        damage=40,
+        radius=70.0,
+        split=2,
+    )
+    grenade.target = pygame.Vector2(target)
+
+    enemy = make_enemy("tracker", (5, 5))
+    enemy.pos = target + pygame.Vector2(0, 30)
+    enemy.hp = 100
+    world.enemies.append(enemy)
+
+    world.resolve_grenade(grenade)
+
+    assert enemy.hp == 60
+
+
+def test_resolve_grenade_is_idempotent_for_direct_callers():
+    world = open_world()
+    target = tile_center(5, 5)
+    grenade = Grenade(
+        target, config.Direction.RIGHT, damage=40
+    )
+    grenade.target = pygame.Vector2(target)
+
+    enemy = make_enemy("tracker", (5, 5))
+    enemy.pos = target
+    enemy.hp = 100
+    world.enemies.append(enemy)
+
+    world.resolve_grenade(grenade)
+    world.resolve_grenade(grenade)
+
+    assert grenade.exploded
+    assert enemy.hp == 60
+
+
+def test_grenade_arcs_over_steel_and_resolves_at_its_target():
+    world = open_world()
+    player = world.players[0]
+    player.pos = tile_center(2, 5)
+    player.direction = config.Direction.RIGHT
+    world.grid[5][4] = config.Tile.STEEL
+    world.grid[5][7] = config.Tile.BRICK
+
+    enemy = make_enemy("tracker", (7, 5))
+    enemy.pos = tile_center(7, 5)
+    enemy.hp = 100
+    world.enemies.append(enemy)
+
+    assert world.throw_grenade(player)
+    world.update(config.GRENADE_FLIGHT, [])
+
+    assert world.grenades == []
+    assert world.is_steel(4, 5)
+    assert not world.is_brick(7, 5)
+    assert enemy.hp == 100 - config.GRENADE_DAMAGE
 
 
 def test_fire_laser_damages_every_enemy_but_not_players_or_base():
@@ -173,6 +239,24 @@ def test_fire_laser_damages_every_enemy_but_not_players_or_base():
     )
 
     assert not world.fire_laser(player)
+
+
+def test_laser_crosses_the_base_without_damaging_it_and_hits_beyond():
+    world = open_world()
+    player = world.players[0]
+    player.pos = tile_center(10, 11)
+    player.direction = config.Direction.RIGHT
+
+    beyond = make_enemy("tracker", (14, 11))
+    beyond.pos = tile_center(14, 11)
+    beyond.hp = 100
+    world.enemies.append(beyond)
+
+    assert world.fire_laser(player)
+
+    assert world.base.hp == config.BASE_HP
+    assert world.base.alive
+    assert beyond.hp == 100 - player.stats.laser_damage
 
 
 def test_laser_destroys_exactly_the_first_brick_and_stops():
@@ -220,6 +304,31 @@ def test_laser_is_blocked_by_steel_without_destroying_bricks_beyond():
     assert world.is_steel(5, 5)
     assert world.is_brick(7, 5)
     assert enemy.hp == 100
+
+
+def test_laser_hit_tolerance_boundary():
+    world = open_world()
+    player = world.players[0]
+    player.pos = tile_center(2, 5)
+    player.direction = config.Direction.RIGHT
+
+    inside = make_enemy("tracker", (5, 5))
+    inside.pos = pygame.Vector2(
+        tile_center(5, 5).x, player.pos.y + 17
+    )
+    inside.hp = 100
+    outside = make_enemy("tracker", (5, 5))
+    outside.pos = pygame.Vector2(
+        tile_center(5, 5).x, player.pos.y + 19
+    )
+    outside.hp = 100
+    world.enemies = [inside, outside]
+
+    assert config.LASER_HIT_TOLERANCE == 18.0
+    assert world.fire_laser(player)
+
+    assert inside.hp == 100 - player.stats.laser_damage
+    assert outside.hp == 100
 
 
 def test_laser_range_respects_player_stats():

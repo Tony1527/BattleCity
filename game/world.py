@@ -350,6 +350,10 @@ class World:
         return True
 
     def resolve_grenade(self, grenade: Grenade) -> None:
+        if grenade.exploded:
+            return
+        grenade.exploded = True
+
         points = grenade.explosion_points()
         hit_enemies: set[int] = set()
         hit_players: set[int] = set()
@@ -414,8 +418,13 @@ class World:
 
     def _update_skills(self, dt: float) -> None:
         for grenade in list(self.grenades):
-            if grenade.update(dt):
+            if grenade.exploded:
+                continue
+            if grenade.elapsed + dt >= grenade.duration:
+                grenade.elapsed = grenade.duration
                 self.resolve_grenade(grenade)
+            else:
+                grenade.update(dt)
         self.grenades = [
             grenade for grenade in self.grenades if not grenade.exploded
         ]
