@@ -114,3 +114,22 @@ def test_title_right_selects_hell_and_starts_hell_run(game):
 
     assert game.world.difficulty.key == "hell"
     assert game.world.base.max_hp == config.BASE_HP_HELL
+
+
+def test_retry_at_level_above_zero_rebuilds_the_same_level(game):
+    start_playing(game)
+    game.level_index = 3
+    game.world = game._make_world(
+        3, game.world.player_stats, game.world.upgrade_levels
+    )
+    old_seed = game.world.seed
+    game.world.status = "lost"
+    game.update(1 / 60)
+    assert game.state == "gameover"
+
+    game.handle_event(key_event(config.CONFIRM_KEY))
+
+    assert game.state == "playing"
+    assert game.level_index == 3
+    assert game.world.level_index == 3
+    assert game.world.seed == old_seed

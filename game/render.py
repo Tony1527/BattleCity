@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 from pathlib import Path
 
 import pygame
@@ -76,6 +77,13 @@ class Renderer:
         self.screen = screen
         self.width, self.height = screen.get_size()
         self.font_path: Path | None = None
+        if not config.FONT_PATH.exists():
+            warnings.warn(
+                f"bundled font missing at {config.FONT_PATH}; "
+                "falling back to a system font",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         for attribute, size in _FONT_SIZES:
             font, loaded_path = self._load_font(size)
             setattr(self, attribute, font)
@@ -763,43 +771,25 @@ class Renderer:
                 pygame.draw.line(
                     self.screen, color, start, end, 2
                 )
-        elif trap.cooldown > config.TRAP_REARM_TIME * 0.5:
-            color = _TRAP_TRIGGERED
-            self._glow_circle(color, center, 24, strength=0.3)
-            pygame.draw.line(
-                self.screen,
-                color,
-                (center[0] - 9, center[1] - 9),
-                (center[0] + 9, center[1] + 9),
-                3,
-            )
-            pygame.draw.line(
-                self.screen,
-                color,
-                (center[0] + 9, center[1] - 9),
-                (center[0] - 9, center[1] + 9),
-                3,
-            )
         else:
-            color = _TRAP_COOLDOWN
-            ratio = max(
-                0.0,
-                min(
-                    1.0,
-                    trap.cooldown
-                    / max(config.TRAP_REARM_TIME, 0.001),
-                ),
+            progress = self._trap_ring_progress(trap)
+            color = _scale(
+                _TRAP_TRIGGERED, max(0.4, 1.0 - 0.55 * progress)
             )
-            pygame.draw.circle(self.screen, color, center, 9, 1)
-            arc_rect = pygame.Rect(0, 0, 22, 22)
-            arc_rect.center = center
-            pygame.draw.arc(
+            radius = self._trap_ring_radius(trap)
+            self._glow_circle(
+                _TRAP_TRIGGERED,
+                center,
+                radius + 8,
+                strength=0.35 * (1.0 - 0.6 * progress),
+            )
+            pygame.draw.circle(self.screen, color, center, radius, 2)
+            pygame.draw.circle(
                 self.screen,
-                _scale(color, 1.15),
-                arc_rect,
-                math.pi / 2,
-                math.pi / 2 + math.tau * ratio,
-                2,
+                _scale(_TRAP_COOLDOWN, 0.8),
+                center,
+                max(4, radius - 4),
+                1,
             )
         pygame.draw.rect(
             self.screen,
@@ -808,6 +798,18 @@ class Renderer:
             width=1,
             border_radius=5,
         )
+
+    def _trap_ring_progress(self, trap) -> float:
+        return 1.0 - max(
+            0.0,
+            min(
+                1.0,
+                trap.cooldown / max(config.TRAP_REARM_TIME, 0.001),
+            ),
+        )
+
+    def _trap_ring_radius(self, trap) -> int:
+        return 8 + int(18 * self._trap_ring_progress(trap))
 
     def _draw_pickups(self, world, offset: tuple[int, int]) -> None:
         for pickup in world.pickups:
@@ -1140,6 +1142,27 @@ class Renderer:
                     )
                     self._glow_circle(
                         color, center, radius + 4, strength=0.35
+                    )
+                if player.invincible_timer > 0.0:
+                    pulse = 0.5 + 0.5 * math.sin(world.elapsed * 8.0)
+                    radius = (
+                        player.rect.width // 2 + 8 + int(4 * pulse)
+                    )
+                    pygame.draw.circle(
+                        self.screen, _PICKUP_GOLD, center, radius, 2
+                    )
+                    pygame.draw.circle(
+                        self.screen,
+                        _scale(_PICKUP_GOLD, 0.7),
+                        center,
+                        radius - 4,
+                        1,
+                    )
+                    self._glow_circle(
+                        _PICKUP_GOLD,
+                        center,
+                        radius + 4,
+                        strength=0.3 + 0.2 * pulse,
                     )
             elif not player.eliminated:
                 pygame.draw.circle(
@@ -1732,11 +1755,13 @@ class Renderer:
         gap = 4
         total = sum(widths) + gap * (len(widths) - 1)
         x = rect.right - 8 - total
-        y = rect.top + 56
+        chip_height = self._buff_chip_height()
+        y = rect.bottom - chip_height - 2
+        text_offset = max(0, (chip_height - self.font_xs.get_height()) // 2)
         for text, width, (_, _, chip_color) in zip(
             texts, widths, labels
         ):
-            chip = pygame.Rect(x, y, width, 20)
+            chip = pygame.Rect(x, y, width, chip_height)
             pygame.draw.rect(
                 self.screen,
                 _scale(chip_color, 0.18),
@@ -1754,10 +1779,13 @@ class Renderer:
                 text,
                 self.font_xs,
                 chip_color,
-                (chip.left + 6, chip.top + 1),
+                (chip.left + 6, chip.top + text_offset),
                 shadow=False,
             )
             x += width + gap
+
+    def _buff_chip_height(self) -> int:
+        return max(20, self.font_xs.get_linesize())
 
     def _draw_cooldown(
         self,
@@ -2109,10 +2137,17 @@ class Renderer:
             align="center",
         )
         self._text(
+            self.tr(f"title.difficulty_{str(difficulty).lower()}"),
+            self.font_s,
+            _scale(difficulty_color, 0.85),
+            (cx, cy + 278),
+            align="center",
+        )
+        self._text(
             self.tr("title.difficulty_hint"),
             self.font_s,
             (126, 164, 192),
-            (cx, cy + 280),
+            (cx, cy + 308),
             align="center",
         )
         self._text(
@@ -2122,14 +2157,14 @@ class Renderer:
             ),
             self.font_m,
             config.P2_AMBER,
-            (cx, cy + 316),
+            (cx, cy + 344),
             align="center",
         )
         self._text(
             self.tr("title.language_hint"),
             self.font_s,
             (126, 164, 192),
-            (cx, cy + 352),
+            (cx, cy + 380),
             align="center",
         )
 
@@ -2335,10 +2370,10 @@ class Renderer:
                 align="center",
             )
 
-    def draw_pause(self) -> None:
+    def draw_pause(self, world=None) -> None:
         self._dim(158)
         cx = self.width // 2
-        card = pygame.Rect(cx - 220, self.height // 2 - 110, 440, 220)
+        card = pygame.Rect(cx - 240, self.height // 2 - 130, 480, 260)
         self._panel(
             card,
             fill=(10, 16, 24),
@@ -2347,21 +2382,38 @@ class Renderer:
         )
         self._begin_glow()
         self._glow_circle(
-            config.P1_BLUE, card.center, 150, strength=0.3
+            config.P1_BLUE, card.center, 170, strength=0.3
         )
         self._end_glow()
         self._text(
             self.tr("pause.title"),
             self.font_xl,
             (232, 248, 255),
-            (cx, card.top + 70),
+            (cx, card.top + 62),
             align="center",
         )
+        if world is not None:
+            difficulty = getattr(
+                getattr(world, "difficulty", None), "key", "normal"
+            )
+            level = getattr(world, "level_index", 0) + 1
+            self._text(
+                self.tr(
+                    "pause.status",
+                    difficulty=self.tr(f"difficulty.{difficulty}"),
+                    level=level,
+                    total=config.LEVEL_COUNT,
+                ),
+                self.font_s,
+                (150, 200, 226),
+                (cx, card.top + 106),
+                align="center",
+            )
         self._text(
             self.tr("pause.resume"),
             self.font_m,
             config.P1_BLUE,
-            (cx, card.top + 128),
+            (cx, card.top + 150),
             align="center",
         )
         self._text(
@@ -2371,14 +2423,14 @@ class Renderer:
             ),
             self.font_s,
             config.P2_AMBER,
-            (cx, card.top + 158),
+            (cx, card.top + 186),
             align="center",
         )
         self._text(
             self.tr("pause.subtitle"),
             self.font_s,
             (126, 164, 192),
-            (cx, card.top + 190),
+            (cx, card.top + 220),
             align="center",
         )
 
@@ -2433,18 +2485,31 @@ class Renderer:
             (cx, cy + 160),
             align="center",
         )
+        difficulty = getattr(
+            getattr(world, "difficulty", None), "key", "normal"
+        )
+        self._text(
+            self.tr(
+                "gameover.difficulty",
+                difficulty=self.tr(f"difficulty.{difficulty}"),
+            ),
+            self.font_s,
+            (150, 180, 202),
+            (cx, cy + 190),
+            align="center",
+        )
         self._text(
             self.tr("gameover.retry"),
             self.font_m,
             config.HOLO_WHITE,
-            (cx, cy + 220),
+            (cx, cy + 236),
             align="center",
         )
         self._text(
             self.tr("gameover.quit"),
             self.font_s,
             (150, 180, 202),
-            (cx, cy + 254),
+            (cx, cy + 270),
             align="center",
         )
 

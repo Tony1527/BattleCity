@@ -268,6 +268,9 @@ class Game:
 
         self._skill_pressed.clear()
         world.update(dt, inputs)
+        for _ in world.pickup_events:
+            self.audio.play("pick")
+        world.pickup_events.clear()
         if self.intro_timer > 0.0:
             self.intro_timer = max(0.0, self.intro_timer - dt)
         self._sync_status()
@@ -293,7 +296,7 @@ class Game:
                 self._skill_pressed.clear()
             elif self.state == "paused":
                 self.state = "playing"
-            elif self.state == "gameover":
+            elif self.state in ("controls", "gameover", "victory"):
                 self.state = "title"
                 self._skill_pressed.clear()
             return
@@ -348,7 +351,7 @@ class Game:
                 )
         elif self.state == "paused":
             self.renderer.draw_world(self.world)
-            self.renderer.draw_pause()
+            self.renderer.draw_pause(self.world)
         elif self.state == "upgrade":
             self.renderer.draw_world(self.world)
             self.renderer.draw_upgrade(

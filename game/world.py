@@ -69,6 +69,7 @@ class World:
             Trap(tile) for tile in self.level.traps
         ]
         self.pickups: list[Pickup] = []
+        self.pickup_events: list[str] = []
         self.pickup_timer = config.ITEM_INITIAL_DELAY
         self.pickup_rng = random.Random(
             f"{self.seed}:{self.level_index}:pickups"
@@ -170,6 +171,18 @@ class World:
         if not in_bounds(tx, ty):
             return False
         return self.grid[ty][tx] == config.Tile.STEEL
+
+    def ai_placement_tile(self, tile: tuple[int, int]) -> bool:
+        tx, ty = tile
+        if not in_bounds(tx, ty):
+            return False
+        if self.grid[ty][tx] != config.Tile.EMPTY:
+            return False
+        if any(trap.tile == (tx, ty) for trap in self.traps):
+            return False
+        if self._tile_occupied(tx, ty):
+            return False
+        return True
 
     def destroy_brick(self, tx: int, ty: int) -> bool:
         if not self.is_brick(tx, ty):
@@ -295,6 +308,10 @@ class World:
                     continue
                 if self._apply_pickup(player, pickup):
                     self.pickups.remove(pickup)
+                    self.pickup_events.append(pickup.kind)
+                    self.effects.burst(
+                        pickup.pos, self._pickup_color(pickup.kind), count=10
+                    )
 
         if self.status != "playing":
             return
@@ -307,6 +324,13 @@ class World:
         self.pickup_timer = self.pickup_rng.uniform(
             *config.ITEM_SPAWN_INTERVAL
         )
+
+    def _pickup_color(self, kind: str) -> tuple[int, int, int]:
+        if kind == "stim":
+            return (92, 222, 244)
+        if kind == "invincible":
+            return (255, 214, 92)
+        return (96, 232, 144)
 
     def _apply_pickup(self, player: Player, pickup: Pickup) -> bool:
         if player is None or not player.alive or player.eliminated:
@@ -646,17 +670,11 @@ class World:
         return enemy
 
     def _tile_spawnable(self, tx: int, ty: int) -> bool:
-        if not in_bounds(tx, ty):
-            return False
-        if self.grid[ty][tx] != config.Tile.EMPTY:
-            return False
         if (tx, ty) in config.BASE_TILES:
             return False
         if (tx, ty) in config.BASE_ENTRANCES:
             return False
-        if self._tile_occupied(tx, ty):
-            return False
-        return True
+        return self.ai_placement_tile((tx, ty))
 
     def _fallback_spawn_tile(self) -> tuple[int, int] | None:
         for ty in range(1, config.GRID_ROWS - 1):

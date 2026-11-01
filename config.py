@@ -7,7 +7,7 @@ from pathlib import Path
 import pygame
 
 ROOT = Path(__file__).resolve().parent
-FONT_PATH = ROOT / "assets/fonts/NotoSansCJKsc-Regular-subset.otf"
+FONT_PATH = ROOT / "assets/fonts/NotoSansSC-Regular-subset.otf"
 FONT_LICENSE_PATH = ROOT / "assets/fonts/OFL.txt"
 
 SCREEN_WIDTH = 1280
@@ -228,7 +228,7 @@ RIVER_BANDS = (0, 1, 1, 1, 2, 2, 2, 0)
 BRIDGE_COUNT = 3
 BRIDGE_WIDTH = 2
 RIVER_ROW_MIN = 4
-RIVER_ROW_MAX = 9
+RIVER_ROW_MAX = 8
 RIVER_ROW_GAP = 2
 BRIDGE_MIN_CENTER = 3
 BRIDGE_MAX_CENTER = 21

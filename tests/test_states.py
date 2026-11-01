@@ -350,3 +350,43 @@ def test_audio_generates_all_named_sounds():
     assert audio.toggle() is False
     assert audio.play("shoot") is None
     assert audio.toggle() is True
+
+
+def test_escape_on_controls_returns_to_title(game):
+    game.handle_event(key_event(config.CONFIRM_KEY))
+    assert game.state == "controls"
+
+    game._skill_pressed.add(0)
+    game.handle_event(key_event(config.PAUSE_KEY))
+
+    assert game.state == "title"
+    assert game._skill_pressed == set()
+
+
+def test_escape_on_victory_returns_to_title(game):
+    start_playing(game)
+    game.world.status = "victory"
+    game.update(1 / 60)
+    assert game.state == "victory"
+
+    game._skill_pressed.add(1)
+    game.handle_event(key_event(config.PAUSE_KEY))
+
+    assert game.state == "title"
+    assert game._skill_pressed == set()
+
+
+def test_pickup_plays_sound_through_game(game, monkeypatch):
+    start_playing(game)
+    monkeypatch.setattr(pygame.key, "get_pressed", lambda: {})
+    played: list[str] = []
+    monkeypatch.setattr(game.audio, "play", played.append)
+    player = game.world.players[0]
+    player.hp = player.max_hp - 1
+    from game.pickups import Pickup
+
+    game.world.pickups = [Pickup("repair", player.center)]
+
+    game.update(1 / 60)
+
+    assert "pick" in played

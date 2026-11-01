@@ -33,6 +33,17 @@ def _aligned_direction(
     return None
 
 
+def _ai_placeable(world, tile: tuple[int, int]) -> bool:
+    placement = getattr(world, "ai_placement_tile", None)
+    if placement is not None:
+        return placement(tile)
+    return (
+        in_bounds(*tile)
+        and not world.is_brick(*tile)
+        and not world.is_steel(*tile)
+    )
+
+
 def _line_is_clear(
     world, start: pygame.Vector2, end: pygame.Vector2
 ) -> bool:
@@ -290,25 +301,26 @@ class Enemy:
                 dy = radius - abs(dx)
                 for offset_y in (dy, -dy):
                     tile = (player_tile[0] + dx, player_tile[1] + offset_y)
-                    if tile == current or not in_bounds(*tile):
-                        continue
-                    if world.is_brick(*tile) or world.is_steel(*tile):
+                    if tile == current or not _ai_placeable(world, tile):
                         continue
                     candidates.append(tile)
             if candidates:
-                return min(
+                ordered = sorted(
                     candidates,
                     key=lambda tile: _distance_squared(
                         self.pos, world.tile_center(*tile)
                     ),
                 )
+                for tile in ordered:
+                    if world.find_path(current, tile) is not None:
+                        return tile
 
         for direction in config.Direction:
             dx, dy = direction.vector
             tile = (current[0] + dx, current[1] + dy)
-            if not in_bounds(*tile):
+            if not _ai_placeable(world, tile):
                 continue
-            if world.is_brick(*tile) or world.is_steel(*tile):
+            if world.find_path(current, tile) is None:
                 continue
             return tile
         return player_tile
@@ -494,6 +506,8 @@ class EliteEnemy(Enemy):
             return
 
         tiles = self._summon_tiles(world)
+        if not tiles:
+            return
         for index in range(available):
             spawn = world.spawn_enemy(
                 "tracker", tiles[index % len(tiles)]
@@ -510,14 +524,9 @@ class EliteEnemy(Enemy):
             (tx - 1, ty),
             (tx, ty),
         ]
-        allowed = [
-            tile
-            for tile in candidates
-            if in_bounds(*tile)
-            and not world.is_brick(*tile)
-            and not world.is_steel(*tile)
+        return [
+            tile for tile in candidates if _ai_placeable(world, tile)
         ]
-        return allowed or [(tx, ty)]
 
 
 def make_enemy(

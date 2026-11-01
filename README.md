@@ -1,6 +1,6 @@
 # 坦克大战：全息军械库（Battle City: Holographic Armory）
 
-一款使用 pygame 实现的本地同屏双人合作坦克防守游戏。两名玩家共用同一块键盘，在程序生成、可破坏的网格迷宫中抵御敌人、保护基地，依次通过 3 个普通关（第 1-3 关）、精英关 1（第 4 关）、2 个普通关（第 5-6 关）、精英关 2（第 7 关），最后挑战最终 Boss（第 8 关），共 8 关（5 个普通关、2 个精英关和 1 个 Boss 关）。
+一款使用 pygame 实现的本地同屏双人合作坦克防守游戏。两名玩家共用同一块键盘，在程序生成、可破坏的网格迷宫中抵御敌人、保护基地，依次通过 7 个普通关（第 1-7 关，每关都会出现精英敌人），最后挑战最终 Boss（第 8 关），共 8 关（7 个普通关和 1 个 Boss 关）。
 
 两位玩家的定位不同：P1 使用范围爆炸的手榴弹清群，P2 使用高伤直线激光点杀和穿透。每关结束后两人各自三选一升级，形成不同流派；本关已出局的玩家跳过该关升级，并在下一关开始时回归。除内置的中文字体外，游戏不依赖任何外部图片或音频素材，所有画面与音效均由 pygame 程序化生成。
 
@@ -38,7 +38,7 @@ python3 -m venv .venv
 
 Windows 下请将 `.venv/bin/` 替换为 `.venv\Scripts\`。
 
-依赖见 `requirements.txt`：`pygame-ce` 与 `pytest`。
+运行时依赖见 `requirements.txt`：`pygame-ce` 与 `pytest`。字体子集工具与字体元数据测试需要 `requirements-dev.txt` 中的 `fonttools` 与 `brotli`。
 
 ## 运行
 
@@ -64,14 +64,14 @@ Windows 下请将 `.venv/bin/` 替换为 `.venv\Scripts\`。
 
 | 通用按键 | 功能 |
 | --- | --- |
-| `Esc` | 暂停 / 继续；失败后返回标题 |
+| `Esc` | 暂停 / 继续；在操作、失败、胜利界面返回标题 |
 | `Enter` | 确认、开始游戏、失败后重试本关、胜利后重新开始 |
 | `L` | 在标题、操作和暂停界面切换中文 / English |
 | `1` `2` `3` | 在关间升级界面选择对应升级 |
 
 ## 语言
 
-标题、操作和暂停界面按 `L` 在中文与 English 之间切换。中文文本使用项目自带的 Noto Sans CJK SC 子集字体渲染。
+标题、操作和暂停界面按 `L` 在中文与 English 之间切换。中文文本使用项目自带的 Noto Sans SC（Noto Sans CJK 的简体中文家族）子集字体渲染。
 
 ## 失败与重试
 
@@ -79,7 +79,7 @@ Windows 下请将 `.venv/bin/` 替换为 `.venv\Scripts\`。
 
 ## 字体与许可
 
-中文界面使用 `assets/fonts/NotoSansCJKsc-Regular-subset.otf`（Noto Sans CJK SC 子集）。该字体按 SIL Open Font License 1.1 分发，许可证全文见 `assets/fonts/OFL.txt`。
+中文界面使用 `assets/fonts/NotoSansSC-Regular-subset.otf`（Noto Sans SC，Noto Sans CJK 的简体中文家族子集）。该字体按 SIL Open Font License 1.1 分发，版权归 Adobe/Source 所有，许可证全文见 `assets/fonts/OFL.txt`。
 
 ## 测试
 

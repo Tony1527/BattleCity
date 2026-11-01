@@ -93,3 +93,29 @@ def test_pickup_rng_is_independent_from_enemy_rng():
     world.pickup_timer = 0.0
     world._update_pickups(0.0)
     assert world.random.getstate() == World(0, seed=16).random.getstate()
+
+
+def test_pickup_emits_particles_and_a_gameplay_event():
+    world = World(0, seed=17)
+    player = world.players[0]
+    player.hp = player.max_hp - 1
+    world.pickups = [Pickup("repair", player.center)]
+    before = len(world.effects.particles)
+
+    world._update_pickups(0.01)
+
+    assert world.pickup_events == ["repair"]
+    assert world.pickups == []
+    assert len(world.effects.particles) > before
+
+
+def test_pickups_do_not_block_player_movement():
+    world = World(0, seed=18)
+    player = world.players[0]
+    world.pickups = [Pickup("stim", world.tile_center(9, 10))]
+    start_x = player.pos.x
+
+    moved = world.move_entity(player, config.Direction.RIGHT, 0.4)
+
+    assert moved is True
+    assert player.pos.x > start_x + 1.0

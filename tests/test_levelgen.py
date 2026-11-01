@@ -9,7 +9,9 @@ from config import (
     ENEMY_SPAWNS,
     GRID_COLS,
     GRID_ROWS,
+    LEVEL_COUNT,
     PLAYER_SPAWNS,
+    RIVER_BANDS,
     Tile,
 )
 from game.levelgen import (
@@ -210,3 +212,14 @@ def test_find_routes_respects_max_routes_and_covers_every_spawn():
             assert _overlap(first, second) <= 0.30
     assert len({_entrance_direction(route[-1]) for route in routes}) >= 2
     assert len(find_routes(level, max_routes=2)) <= 2
+
+
+@pytest.mark.parametrize("level_index", range(LEVEL_COUNT))
+def test_rivers_never_overwrite_player_spawn_safe_rows(level_index):
+    if RIVER_BANDS[level_index] <= 0:
+        return
+    for seed in range(5):
+        level = generate_level(seed, level_index)
+        for ty, row in enumerate(level.grid):
+            if any(tile in (Tile.RIVER, Tile.BRIDGE) for tile in row):
+                assert ty <= 8

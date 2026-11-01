@@ -53,7 +53,7 @@
 - 逻辑与渲染分离；纯逻辑可 pytest，无头 SDL dummy 可运行。
 - 数值集中在 `config.py` / 小型 dataclass，不散落在渲染或状态机里。
 - 关卡生成必须继续满足：至少 3 条从出生点到基地的路线、至少 2 个不同方向的基地入口、出生点安全区。
-- 所有新美术仍用 pygame 程序化绘制。唯一外部素材是中文界面字体：使用 OFL 许可的 Noto Sans CJK SC 子集，并附许可证；其余素材自己创作。
+- 所有新美术仍用 pygame 程序化绘制。唯一外部素材是中文界面字体：使用 OFL 许可的 Noto Sans SC（Noto Sans CJK 的简体中文家族）子集，并附许可证；其余素材自己创作。
 - 不引入运行时网络请求；字体和许可证随仓库提交。
 
 ## 6. 已选方案（Approaches）
@@ -254,7 +254,7 @@ RIVER_BANDS = (0, 1, 1, 1, 2, 2, 2, 0)  # 索引 0..7，Boss 关为 0
 每条河流：
 
 - 占据 1 行，从第 1 列到第 22 列。
-- 行号在 4..9 之间选择，避开基地、出生点和基地入口。
+- 行号在 4..8 之间选择，避开基地、出生点和基地入口。
 - 每条河放置 3 座桥，桥宽 2 格，桥中心在 3..21 之间且彼此至少间隔 4 格。
 - 桥格设为 `BRIDGE`，其余河格设为 `RIVER`。
 - 河流会覆盖该行原有砖/钢墙；这是有意的，用来形成清晰的横向水带。
@@ -392,8 +392,8 @@ def tr(language: str, key: str, **kwargs) -> str: ...
 
 ### 12.3 字体
 
-- 使用 Noto Sans CJK SC Regular 的子集，许可证为 SIL Open Font License 1.1。
-- 随仓库提交 `assets/fonts/NotoSansCJKsc-Regular-subset.otf` 和 `assets/fonts/OFL.txt`。
+- 使用 Noto Sans SC Regular（Noto Sans CJK 的简体中文家族）的子集，许可证为 SIL Open Font License 1.1。
+- 随仓库提交 `assets/fonts/NotoSansSC-Regular-subset.otf` 和 `assets/fonts/OFL.txt`。
 - 子集包含：ASCII、数字、常用中英文标点、`TEXTS["zh"]` 和全部中文升级文案中出现的所有汉字。
 - 提供 `tools/build_font_subset.py`，从完整源字体生成子集；运行游戏不需要 fonttools。
 - 运行时优先加载随包字体；缺失时尝试系统中文字体（PingFang SC / Microsoft YaHei / Noto Sans CJK SC），最后回退默认字体并打印警告。

@@ -5,6 +5,7 @@ import pytest
 
 import config
 from game import enemies, entities, geometry
+from game.hazards import Trap
 from game.world import World
 
 
@@ -595,3 +596,62 @@ def test_gunner_fires_at_a_brick_blocking_its_reposition_path():
             break
 
     assert not world.is_brick(4, 5)
+
+
+def _open_world(seed: int = 3) -> World:
+    world = World(0, seed=seed)
+    world.grid = [
+        [config.Tile.EMPTY for _ in range(config.GRID_COLS)]
+        for _ in range(config.GRID_ROWS)
+    ]
+    world.level.grid = world.grid
+    world.traps = []
+    world.enemies = []
+    world.boss = None
+    return world
+
+
+def test_reposition_goal_avoids_river_tiles():
+    world = _open_world()
+    for tx in range(1, config.GRID_COLS - 1):
+        world.grid[6][tx] = config.Tile.RIVER
+    world.grid[6][11] = config.Tile.BRIDGE
+    player = make_player(tile=(5, 8))
+    gunner = enemies.make_enemy("gunner", (5, 9))
+
+    goal = gunner._reposition_goal(world, player)
+
+    assert world.grid[goal[1]][goal[0]] == config.Tile.EMPTY
+
+
+def test_elite_summons_beside_itself_on_clear_ground():
+    world = _open_world()
+    world.grid[4][5] = config.Tile.BRIDGE
+    world.grid[5][6] = config.Tile.RIVER
+    world.traps.append(Trap((4, 5)))
+    elite = enemies.make_enemy("elite", (5, 5))
+    world.enemies = [elite]
+    elite.summon_timer = 0.0
+
+    elite.update(0.0, world)
+
+    summons = [enemy for enemy in world.enemies if enemy is not elite]
+    assert summons
+    for summon in summons:
+        sx, sy = world.point_to_tile(summon.pos)
+        assert max(abs(sx - 5), abs(sy - 5)) == 1
+        assert world.grid[sy][sx] == config.Tile.EMPTY
+        assert (sx, sy) not in {trap.tile for trap in world.traps}
+
+
+def test_fallback_spawn_tile_avoids_traps():
+    world = _open_world()
+    target = (7, 7)
+    world.traps = [
+        Trap((tx, ty))
+        for ty in range(config.GRID_ROWS)
+        for tx in range(config.GRID_COLS)
+        if (tx, ty) != target
+    ]
+
+    assert world._fallback_spawn_tile() == target

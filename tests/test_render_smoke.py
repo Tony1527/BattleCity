@@ -700,3 +700,101 @@ def test_gameover_prompts_are_localized(screen):
 
     assert i18n.tr("zh", "gameover.retry") in labels
     assert i18n.tr("zh", "gameover.quit") in labels
+
+
+def test_invincibility_draws_gold_pulsing_aura(screen):
+    world = World(0, seed=31)
+    player = world.players[0]
+    renderer = Renderer(screen)
+
+    screen.fill(config.BG)
+    renderer.draw_world(world)
+    baseline = count_pixels_in_rect(
+        screen,
+        pygame.Rect(
+            int(player.center.x) - 42,
+            int(player.center.y) - 42,
+            84,
+            84,
+        ),
+        is_invincible_gold,
+    )
+
+    player.invincible_timer = 4.0
+    screen.fill(config.BG)
+    renderer.draw_world(world)
+    aura = count_pixels_in_rect(
+        screen,
+        pygame.Rect(
+            int(player.center.x) - 42,
+            int(player.center.y) - 42,
+            84,
+            84,
+        ),
+        is_invincible_gold,
+    )
+
+    assert aura > baseline + 8
+
+
+def test_triggered_trap_draws_an_expanding_ring(screen):
+    world = World(0, seed=32)
+    trap = world.traps[0]
+    renderer = Renderer(screen)
+
+    trap.armed = False
+    trap.cooldown = config.TRAP_REARM_TIME
+    early = renderer._trap_ring_radius(trap)
+    screen.fill(config.BG)
+    renderer.draw_world(world)
+    assert count_pixels_in_rect(
+        screen,
+        pygame.Rect(
+            config.PLAYFIELD_X + trap.tile[0] * config.TILE,
+            config.PLAYFIELD_Y + trap.tile[1] * config.TILE,
+            config.TILE,
+            config.TILE,
+        ),
+        is_trap_red,
+    ) > 8
+
+    trap.cooldown = config.TRAP_REARM_TIME * 0.2
+    late = renderer._trap_ring_radius(trap)
+    screen.fill(config.BG)
+    renderer.draw_world(world)
+
+    assert late > early + 8
+
+def test_pause_and_gameover_show_difficulty_and_level(screen):
+    world = World(2, seed=1, difficulty="hell")
+    renderer = Renderer(screen)
+    labels = capture_text(renderer)
+
+    renderer.draw_pause(world)
+    assert any("HELL" in label for label in labels)
+    assert any("LEVEL 3 / 8" in label for label in labels)
+
+    labels.clear()
+    renderer.draw_game_over(world, "gameover.base_destroyed")
+    assert any("HELL" in label for label in labels)
+
+
+def test_title_shows_one_line_difficulty_description(screen):
+    renderer = Renderer(screen)
+    labels = capture_text(renderer)
+
+    renderer.draw_title(0.0, "normal")
+    assert i18n.tr("en", "title.difficulty_normal") in labels
+
+    labels.clear()
+    renderer.draw_title(0.0, "hell")
+    assert i18n.tr("en", "title.difficulty_hell") in labels
+
+
+def test_buff_chip_height_tracks_font_metrics(screen):
+    renderer = Renderer(screen)
+
+    assert renderer._buff_chip_height() == max(
+        20, renderer.font_xs.get_linesize()
+    )
+    assert renderer._buff_chip_height() >= renderer.font_xs.get_height()
