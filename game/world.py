@@ -13,6 +13,8 @@ from game.geometry import in_bounds, point_to_tile, tile_center, tile_rect
 from game.input import PlayerInput
 from game.levelgen import Level, generate_level
 from game.pathfinding import astar
+from game.skills import Grenade, compute_laser, point_near_segment
+from game.upgrades import apply_upgrade as _apply_upgrade
 
 _BULLET_SUBSTEP = 6.0
 _MOVE_SUBSTEP = 1.0
@@ -273,8 +275,156 @@ class World:
         self.effects.burst(center, config.ENEMY_ORANGE, count=24)
         self.effects.shake(6.0)
 
+    def throw_grenade(self, player: Player) -> bool:
+        if (
+            player is None
+            or not player.alive
+            or player.eliminated
+            or player.grenade_timer > 0.0
+        ):
+            return False
+
+        stats = player.stats
+        grenade = Grenade(
+            player.center,
+            player.direction,
+            owner_id=player.player_id,
+            damage=stats.grenade_damage,
+            radius=stats.grenade_radius,
+            split=stats.grenade_split,
+        )
+        self.grenades.append(grenade)
+        player.grenade_timer = stats.grenade_cooldown
+        self.effects.burst(
+            player.center, self._player_color(player), count=3
+        )
+        return True
+
+    def fire_laser(self, player: Player) -> bool:
+        if (
+            player is None
+            or not player.alive
+            or player.eliminated
+            or player.laser_timer > 0.0
+        ):
+            return False
+
+        stats = player.stats
+        beam = compute_laser(
+            player.center,
+            player.direction,
+            stats.laser_range,
+            self.grid,
+        )
+        self.lasers.append(beam)
+        player.laser_timer = stats.laser_cooldown
+        self.effects.burst(
+            player.center, config.HOLO_WHITE, count=4
+        )
+
+        if beam.brick_tile is not None:
+            self.destroy_brick(*beam.brick_tile)
+
+        for enemy in self.enemies:
+            if not enemy.alive:
+                continue
+            if not point_near_segment(
+                enemy.center,
+                beam.origin,
+                beam.end,
+                config.LASER_HIT_TOLERANCE,
+            ):
+                continue
+            destroyed = enemy.take_damage(stats.laser_damage, self)
+            if destroyed:
+                self.effects.burst(
+                    enemy.center, config.ENEMY_RED, count=16
+                )
+                self.effects.shake(2.5)
+            else:
+                self.effects.burst(
+                    enemy.center, config.ENEMY_ORANGE, count=5
+                )
+
+        self.effects.shake(2.0)
+        return True
+
+    def resolve_grenade(self, grenade: Grenade) -> None:
+        points = grenade.explosion_points()
+        hit_enemies: set[int] = set()
+        hit_players: set[int] = set()
+        player_damage = round(
+            grenade.damage * config.GRENADE_FRIENDLY_FACTOR
+        )
+
+        for point in points:
+            for ty in range(config.GRID_ROWS):
+                for tx in range(config.GRID_COLS):
+                    if not self.is_brick(tx, ty):
+                        continue
+                    if point.distance_to(tile_center(tx, ty)) <= grenade.radius:
+                        self.destroy_brick(tx, ty)
+
+            for enemy in self.enemies:
+                if not enemy.alive or id(enemy) in hit_enemies:
+                    continue
+                if point.distance_to(enemy.center) > grenade.radius:
+                    continue
+                hit_enemies.add(id(enemy))
+                destroyed = enemy.take_damage(grenade.damage, self)
+                if destroyed:
+                    self.effects.burst(
+                        enemy.center, config.ENEMY_RED, count=16
+                    )
+                else:
+                    self.effects.burst(
+                        enemy.center, config.ENEMY_ORANGE, count=5
+                    )
+
+            for player in self.players:
+                if not player.alive or player.eliminated:
+                    continue
+                if id(player) in hit_players:
+                    continue
+                if point.distance_to(player.center) > grenade.radius:
+                    continue
+                hit_players.add(id(player))
+                self.damage_player(player, player_damage)
+
+            self.effects.burst(point, config.ENEMY_ORANGE, count=18)
+
+        self.effects.shake(5.0)
+
+    def apply_upgrade(self, player_id: int, upgrade_id: str) -> bool:
+        if not 0 <= player_id < len(self.players):
+            return False
+
+        player = self.players[player_id]
+        stats = player.stats
+        previous_max_hp = stats.max_hp
+        if not _apply_upgrade(
+            stats, self.upgrade_levels[player_id], upgrade_id
+        ):
+            return False
+
+        gained = stats.max_hp - previous_max_hp
+        if gained > 0:
+            player.hp = min(stats.max_hp, player.hp + gained)
+        return True
+
     def _update_skills(self, dt: float) -> None:
-        return None
+        for grenade in list(self.grenades):
+            if grenade.update(dt):
+                self.resolve_grenade(grenade)
+        self.grenades = [
+            grenade for grenade in self.grenades if not grenade.exploded
+        ]
+
+        for laser in self.lasers:
+            laser.update(dt)
+        self.lasers = [
+            laser for laser in self.lasers if laser.life > 0.0
+        ]
 
     def _update_spawning(self, dt: float) -> None:
         return None
