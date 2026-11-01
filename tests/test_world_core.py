@@ -20,6 +20,7 @@ def empty_grid():
 def open_world(seed=1):
     world = World(0, seed=seed)
     world.grid = empty_grid()
+    world.level.grid = world.grid
     return world
 
 
@@ -103,6 +104,36 @@ def test_world_constructs_level_players_base_and_shared_lives():
     assert len(world.upgrade_levels) == len(world.players)
 
 
+def test_world_defaults_match_spec_literals():
+    world = World(0, seed=1)
+
+    assert config.SHARED_LIVES == 3
+    assert world.shared_lives == 3
+    assert config.BASE_HP == 3
+    assert world.base.max_hp == 3
+    assert world.base.hp == 3
+
+
+def test_base_entrances_is_a_data_attribute():
+    world = World(0, seed=1)
+
+    assert not callable(world.base_entrances)
+    assert world.base_entrances == config.BASE_ENTRANCES
+    assert tuple(world.base_entrances) == config.BASE_ENTRANCES
+
+
+def test_grid_shares_the_level_object_and_stays_fresh():
+    world = World(0, seed=1)
+
+    assert world.grid is world.level.grid
+
+    world.grid[5][5] = config.Tile.BRICK
+    world.destroy_brick(5, 5)
+
+    assert world.grid[5][5] == config.Tile.EMPTY
+    assert world.level.grid[5][5] == config.Tile.EMPTY
+
+
 def test_move_entity_is_blocked_by_brick_and_steel_but_slides_on_free_axis():
     for blocker in (config.Tile.BRICK, config.Tile.STEEL):
         world = open_world()
@@ -127,10 +158,16 @@ def test_move_entity_stays_inside_the_playfield():
     world = open_world()
     player = world.players[0]
     player.pos = tile_center(1, 5)
+    start_x = player.pos.x
 
-    world.move_entity(player, config.Direction.LEFT, 10.0)
+    moved = world.move_entity(player, config.Direction.LEFT, 10.0)
 
-    assert player.rect.left >= config.PLAYFIELD_RECT.left
+    assert moved
+    assert player.pos.x < start_x
+    assert player.pos.x == pytest.approx(
+        config.PLAYFIELD_RECT.left + config.PLAYER_SIZE / 2
+    )
+    assert player.rect.left == config.PLAYFIELD_RECT.left
 
 
 def test_friendly_bullet_destroys_brick_and_disappears():
@@ -149,6 +186,25 @@ def test_friendly_bullet_destroys_brick_and_disappears():
     assert not bullet.alive
     assert world.bullets == []
     assert not world.is_brick(5, 5)
+
+
+def test_bullet_hits_steel_and_dies_without_destroying_it():
+    world = open_world()
+    world.grid[5][5] = config.Tile.STEEL
+    bullet = Bullet(
+        tile_center(4, 5),
+        config.Direction.RIGHT,
+        speed=config.PLAYER_BULLET_SPEED,
+        friendly=True,
+    )
+    world.bullets.append(bullet)
+
+    world.update(0.2, [])
+
+    assert not bullet.alive
+    assert world.bullets == []
+    assert world.is_steel(5, 5)
+    assert world.grid[5][5] == config.Tile.STEEL
 
 
 def test_bullet_substeps_do_not_tunnel_through_walls():
@@ -217,6 +273,133 @@ def test_enemy_bullets_damage_players_and_base():
     assert not base_bullet.alive
 
 
+def test_hit_invulnerability_blocks_a_second_enemy_bullet():
+    world = open_world()
+    player = world.players[0]
+
+    first = Bullet(
+        player.center, config.Direction.RIGHT, speed=0.0, friendly=False
+    )
+    world.bullets.append(first)
+    world.update(0.0, [])
+
+    damaged_hp = player.hp
+    assert damaged_hp == player.max_hp - 1
+    assert player.invuln > 0.0
+
+    second = Bullet(
+        player.center, config.Direction.RIGHT, speed=0.0, friendly=False
+    )
+    world.bullets.append(second)
+    world.update(0.0, [])
+
+    assert player.hp == damaged_hp
+    assert not second.alive
+    assert world.bullets == []
+
+
+def test_respawn_invulnerability_blocks_enemy_bullets():
+    world = open_world()
+    player = world.players[0]
+    player.hp = 1
+    player.invuln = 0.0
+    world.damage_player(player, 1)
+    world.update(config.RESPAWN_DELAY, [])
+
+    assert player.alive
+    assert player.invuln == pytest.approx(config.RESPAWN_INVULN)
+
+    hp = player.hp
+    bullet = Bullet(
+        player.center, config.Direction.RIGHT, speed=0.0, friendly=False
+    )
+    world.bullets.append(bullet)
+    world.update(0.0, [])
+
+    assert player.hp == hp
+    assert not bullet.alive
+
+
+def test_base_shield_absorbs_damage_before_hp():
+    world = open_world()
+    world.base.reset_for_level(shield=2)
+
+    world.damage_base(1)
+    assert world.base.shield == 1
+    assert world.base.hp == config.BASE_HP
+
+    world.damage_base(1)
+    assert world.base.shield == 0
+    assert world.base.hp == config.BASE_HP
+
+    world.damage_base(1)
+    assert world.base.shield == 0
+    assert world.base.hp == config.BASE_HP - 1
+
+
+def test_out_of_bounds_bullets_are_removed():
+    world = open_world()
+    bullet = Bullet(
+        (config.PLAYFIELD_RECT.right + 10, tile_center(5, 5).y),
+        config.Direction.RIGHT,
+        speed=0.0,
+        friendly=True,
+    )
+    world.bullets.append(bullet)
+
+    world.update(0.0, [])
+
+    assert not bullet.alive
+    assert world.bullets == []
+
+
+def test_enemy_fire_spawns_enemy_bullets_that_damage_players_and_base():
+    world = open_world()
+    player = world.players[0]
+    enemy = make_enemy("tracker", world.point_to_tile(player.center))
+    enemy.pos = pygame.Vector2(player.center)
+    world.enemies.append(enemy)
+
+    bullet = world.enemy_fire(enemy, config.Direction.RIGHT)
+
+    assert bullet is not None
+    assert not bullet.friendly
+    assert bullet.owner_id == -1
+    assert bullet.speed == enemy.spec.bullet_speed
+    assert bullet.damage == enemy.spec.bullet_damage
+    assert bullet in world.bullets
+
+    world.update(0.0, [])
+    assert player.hp == player.max_hp - enemy.spec.bullet_damage
+
+    base_world = open_world()
+    base_enemy = make_enemy(
+        "tracker", base_world.point_to_tile(base_world.base.center)
+    )
+    base_enemy.pos = pygame.Vector2(base_world.base.center)
+    base_world.enemies.append(base_enemy)
+    base_bullet = base_world.enemy_fire(base_enemy, config.Direction.RIGHT)
+
+    assert base_bullet is not None
+    base_world.update(0.0, [])
+    assert base_world.base.hp == config.BASE_HP - base_enemy.spec.bullet_damage
+
+
+def test_demolisher_blast_damages_players_and_bricks_not_base():
+    world = open_world()
+    enemy = make_enemy("demolisher", (5, 5))
+    player = world.players[0]
+    player.pos = tile_center(5, 6)
+    world.grid[5][6] = config.Tile.BRICK
+
+    world.demolisher_blast(enemy)
+
+    assert player.hp == player.max_hp - config.DEMOLISHER_BLAST_DAMAGE
+    assert not world.is_brick(6, 5)
+    assert world.base.hp == config.BASE_HP
+    assert world.base.alive
+
+
 def test_friendly_bullets_damage_enemies():
     world = open_world()
     enemy = make_enemy("tracker", (5, 5))
@@ -262,6 +445,21 @@ def test_destroyed_player_consumes_shared_life_and_respawns_invulnerable():
     assert player.respawn_timer == 0.0
     assert player.invuln == pytest.approx(config.RESPAWN_INVULN)
     assert player.pos == tile_center(*config.PLAYER_SPAWNS[0])
+
+
+def test_damage_player_ignores_an_already_dead_player():
+    world = open_world()
+    player = world.players[0]
+    player.alive = False
+    player.hp = 0
+    player.respawn_timer = config.RESPAWN_DELAY
+    lives = world.shared_lives
+
+    world.damage_player(player, 1)
+
+    assert world.shared_lives == lives
+    assert player.respawn_timer == pytest.approx(config.RESPAWN_DELAY)
+    assert not player.eliminated
 
 
 def test_destroyed_player_with_no_shared_lives_is_eliminated():
@@ -316,6 +514,25 @@ def test_lost_status_freezes_further_updates():
     assert world.elapsed == start_elapsed
     assert player.pos == start_pos
     assert world.bullets == []
+
+
+def test_update_short_circuits_after_mid_frame_defeat():
+    world = open_world()
+    world.base.hp = 1
+    world.base.shield = 0
+    enemy = make_enemy("tracker", (5, 5))
+    world.enemies.append(enemy)
+    enemy_pos = pygame.Vector2(enemy.pos)
+    bullet = Bullet(
+        world.base.center, config.Direction.RIGHT, speed=0.0, friendly=False
+    )
+    world.bullets.append(bullet)
+
+    world.update(0.5, [])
+
+    assert world.status == "lost"
+    assert not world.base.alive
+    assert enemy.pos == enemy_pos
 
 
 def test_player_fire_respects_fire_interval():

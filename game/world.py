@@ -15,7 +15,7 @@ from game.levelgen import Level, generate_level
 from game.pathfinding import astar
 
 _BULLET_SUBSTEP = 6.0
-_MOVE_SUBSTEP = 4.0
+_MOVE_SUBSTEP = 1.0
 _EPSILON = 1e-9
 
 
@@ -31,9 +31,7 @@ class World:
         self.seed = self.level_index if seed is None else int(seed)
         self.random = random.Random(self.seed)
         self.level: Level = generate_level(self.seed)
-        self.grid: list[list[config.Tile]] = [
-            row[:] for row in self.level.grid
-        ]
+        self.grid: list[list[config.Tile]] = self.level.grid
 
         self.status = "playing"
         self.elapsed = 0.0
@@ -172,18 +170,22 @@ class World:
         self.effects.update(dt)
         self._update_skills(dt)
         self._update_spawning(dt)
+        if self.status != "playing":
+            return
 
         for player in self.players:
             player.update_timers(dt)
         self._respawn_players()
         self._update_players(dt, player_inputs)
         self._update_bullets(dt)
+        if self.status != "playing":
+            return
         self._update_enemies(dt)
         self.enemies = [enemy for enemy in self.enemies if enemy.alive]
         self._check_defeat()
 
     def damage_player(self, player: Player, amount: int) -> None:
-        if player is None or amount <= 0:
+        if player is None or not player.alive or amount <= 0:
             return
 
         destroyed = player.take_damage(amount)
