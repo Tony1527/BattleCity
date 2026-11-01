@@ -28,6 +28,16 @@ def _level_value(values, level_index: int, default=0):
     return default
 
 
+def _point_rect_distance(
+    point: tuple[float, float] | pygame.Vector2,
+    rect: pygame.Rect,
+) -> float:
+    point = pygame.Vector2(point)
+    dx = max(rect.left - point.x, 0.0, point.x - rect.right)
+    dy = max(rect.top - point.y, 0.0, point.y - rect.bottom)
+    return math.hypot(dx, dy)
+
+
 class World:
     def __init__(
         self,
@@ -412,9 +422,7 @@ class World:
         kind: str,
         tile: tuple[int, int] | None = None,
     ) -> Enemy | None:
-        if tile is not None and (
-            self.is_steel(*tile) or self._tile_occupied(*tile)
-        ):
+        if tile is not None and not self._tile_spawnable(*tile):
             tile = None
         if tile is None:
             tile = self._choose_spawn_tile()
@@ -426,14 +434,24 @@ class World:
         self.enemies.append(enemy)
         return enemy
 
+    def _tile_spawnable(self, tx: int, ty: int) -> bool:
+        if not in_bounds(tx, ty):
+            return False
+        if self.grid[ty][tx] != config.Tile.EMPTY:
+            return False
+        if (tx, ty) in config.BASE_TILES:
+            return False
+        if (tx, ty) in config.BASE_ENTRANCES:
+            return False
+        if self._tile_occupied(tx, ty):
+            return False
+        return True
+
     def _fallback_spawn_tile(self) -> tuple[int, int] | None:
         for ty in range(1, config.GRID_ROWS - 1):
             for tx in range(1, config.GRID_COLS - 1):
-                if self.is_steel(tx, ty):
-                    continue
-                if self._tile_occupied(tx, ty):
-                    continue
-                return (tx, ty)
+                if self._tile_spawnable(tx, ty):
+                    return (tx, ty)
         return None
 
     def _tile_occupied(self, tx: int, ty: int) -> bool:
@@ -464,9 +482,7 @@ class World:
         start = self.random.randrange(len(spawns))
         for offset in range(len(spawns)):
             tile = spawns[(start + offset) % len(spawns)]
-            if self.is_steel(*tile):
-                continue
-            if self._tile_occupied(*tile):
+            if not self._tile_spawnable(*tile):
                 continue
             return tile
         return None
@@ -489,6 +505,11 @@ class World:
                     continue
                 if center.distance_to(tile_center(tx, ty)) <= radius:
                     self.destroy_brick(tx, ty)
+
+        if self.base.alive and _point_rect_distance(
+            center, self.base.rect
+        ) <= radius:
+            self.damage_base(config.DEMOLISHER_BLAST_DAMAGE)
 
         self.effects.burst(center, config.ENEMY_ORANGE, count=24)
         self.effects.shake(6.0)
@@ -567,11 +588,8 @@ class World:
         if (
             self.boss is not None
             and self.boss.alive
-            and point_near_segment(
-                self.boss.center,
-                beam.origin,
-                beam.end,
-                config.LASER_HIT_TOLERANCE,
+            and self.boss.rect.clipline(
+                (beam.origin.x, beam.origin.y, beam.end.x, beam.end.y)
             )
         ):
             self._damage_boss(stats.laser_damage)
@@ -589,9 +607,6 @@ class World:
         hit_enemies: set[int] = set()
         hit_players: set[int] = set()
         hit_boss = False
-        player_damage = round(
-            grenade.damage * config.GRENADE_FRIENDLY_FACTOR
-        )
 
         for point in points:
             for ty in range(config.GRID_ROWS):
@@ -621,7 +636,8 @@ class World:
                 not hit_boss
                 and self.boss is not None
                 and self.boss.alive
-                and point.distance_to(self.boss.center) <= grenade.radius
+                and _point_rect_distance(point, self.boss.rect)
+                <= grenade.radius
             ):
                 hit_boss = True
                 self._damage_boss(grenade.damage)
@@ -634,7 +650,13 @@ class World:
                 if point.distance_to(player.center) > grenade.radius:
                     continue
                 hit_players.add(id(player))
-                self.damage_player(player, player_damage)
+                friendly_damage = max(
+                    1,
+                    round(
+                        player.max_hp * config.GRENADE_FRIENDLY_FACTOR
+                    ),
+                )
+                self.damage_player(player, friendly_damage)
 
             self.effects.burst(point, config.ENEMY_ORANGE, count=18)
 
@@ -679,7 +701,7 @@ class World:
 
     def _clear_boss_arena(self) -> None:
         for ty in range(1, 5):
-            for tx in range(9, 15):
+            for tx in range(6, 18):
                 if in_bounds(tx, ty):
                     self.grid[ty][tx] = config.Tile.EMPTY
 

@@ -48,17 +48,15 @@ def test_throw_grenade_creates_grenade_toward_facing_and_sets_cooldown():
     assert len(world.grenades) == 1
 
 
-def test_grenade_damages_enemies_fully_players_at_thirty_five_percent_and_never_base():
+def test_grenade_damages_enemies_fully_and_players_for_one_hp():
     world = open_world()
     thrower, ally = world.players
     target = pygame.Vector2(world.base.center)
 
     thrower.pos = target
     thrower.invuln = 0.0
-    thrower.hp = 50
     ally.pos = target + pygame.Vector2(0, 20)
     ally.invuln = 0.0
-    ally.hp = 50
 
     enemy = make_enemy("tracker", (5, 5))
     enemy.pos = target + pygame.Vector2(0, -20)
@@ -73,11 +71,56 @@ def test_grenade_damages_enemies_fully_players_at_thirty_five_percent_and_never_
     world.resolve_grenade(grenade)
 
     assert config.GRENADE_FRIENDLY_FACTOR == 0.35
+    assert thrower.max_hp == 3
+    assert ally.max_hp == 3
     assert enemy.hp == 100 - 40
-    assert thrower.hp == 50 - 14
-    assert ally.hp == 50 - 14
+    assert thrower.hp == 3 - 1
+    assert ally.hp == 3 - 1
+    assert thrower.alive
+    assert ally.alive
     assert world.base.hp == config.BASE_HP
     assert world.base.alive
+
+
+def test_grenade_friendly_damage_scales_with_player_max_hp():
+    stats = config.PlayerStats(max_hp=6)
+    world = open_world(player_stats=[stats])
+    thrower, ally = world.players
+    target = tile_center(5, 5)
+    thrower.pos = target
+    thrower.invuln = 0.0
+    ally.pos = target + pygame.Vector2(0, 20)
+    ally.invuln = 0.0
+
+    grenade = Grenade(target, config.Direction.RIGHT, damage=40)
+    grenade.target = pygame.Vector2(target)
+    world.resolve_grenade(grenade)
+
+    assert thrower.max_hp == 6
+    assert thrower.hp == 6 - 2
+    assert ally.max_hp == 3
+    assert ally.hp == 3 - 1
+
+
+def test_grenade_at_edge_clamp_near_thrower_does_not_kill_full_hp_player():
+    world = open_world()
+    thrower = world.players[0]
+    thrower.pos = pygame.Vector2(
+        config.PLAYFIELD_X + config.GRENADE_MARGIN + 4,
+        tile_center(5, 5).y,
+    )
+    thrower.direction = config.Direction.LEFT
+    thrower.invuln = 0.0
+    thrower.hp = thrower.max_hp
+    world.players[1].pos = tile_center(18, 10)
+
+    assert world.throw_grenade(thrower)
+    world.update(config.GRENADE_FLIGHT + 0.01, [])
+
+    assert world.grenades == []
+    assert thrower.hp == thrower.max_hp - 1
+    assert thrower.hp > 0
+    assert thrower.alive
 
 
 def test_grenade_destroys_bricks_inside_radius_but_not_outside_or_steel():

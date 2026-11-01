@@ -109,6 +109,7 @@ class Player:
         self.fire_timer = 0.0
         self.grenade_timer = 0.0
         self.laser_timer = 0.0
+        self.damage_residual = 0.0
 
     @property
     def max_hp(self) -> int:
@@ -141,11 +142,19 @@ class Player:
         self.fire_timer = self.stats.fire_interval
 
     def take_damage(self, amount: int) -> bool:
-        if not self.alive or self.invuln > 0:
+        if not self.alive or self.invuln > 0 or amount <= 0:
             return False
 
-        effective = max(1, round(amount * (1 - self.stats.damage_reduction)))
-        self.hp = max(0, self.hp - effective)
+        reduced = (
+            amount * (1.0 - self.stats.damage_reduction)
+            + self.damage_residual
+        )
+        dealt = int(reduced + 1e-9)
+        self.damage_residual = reduced - dealt
+        if dealt <= 0:
+            return False
+
+        self.hp = max(0, self.hp - dealt)
         self.invuln = config.HIT_INVULN
 
         if self.hp == 0:
@@ -160,3 +169,4 @@ class Player:
         self.eliminated = False
         self.invuln = config.RESPAWN_INVULN
         self.respawn_timer = 0.0
+        self.damage_residual = 0.0

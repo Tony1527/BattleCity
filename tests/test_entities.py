@@ -132,6 +132,33 @@ def test_player_take_damage_applies_armor_reduction_and_invulnerability():
     assert player.alive is True
 
 
+def test_damage_reduction_accumulates_fractional_damage():
+    stats = config.PlayerStats(max_hp=100, damage_reduction=0.15)
+    player = entities.Player(0, (0, 0), stats=stats)
+
+    dealt = 0
+    for _ in range(20):
+        player.invuln = 0.0
+        before = player.hp
+        player.take_damage(1)
+        dealt += before - player.hp
+
+    assert dealt == 17
+    assert player.hp == 83
+    assert player.damage_residual == pytest.approx(0.0, abs=1e-6)
+
+
+def test_take_damage_zero_is_a_true_no_op():
+    stats = config.PlayerStats(max_hp=3, damage_reduction=0.15)
+    player = entities.Player(0, (0, 0), stats=stats)
+    player.damage_residual = 0.5
+
+    assert player.take_damage(0) is False
+    assert player.hp == 3
+    assert player.invuln == 0.0
+    assert player.damage_residual == pytest.approx(0.5)
+
+
 def test_player_ignores_damage_while_invulnerable():
     stats = config.PlayerStats(max_hp=10)
     player = entities.Player(1, (0, 0), stats=stats)
@@ -170,6 +197,7 @@ def test_player_revive_restores_health_position_and_respawn_invulnerability():
     player = entities.Player(1, (10, 10), stats=stats)
     player.take_damage(999)
     player.respawn_timer = 2.5
+    player.damage_residual = 0.4
 
     player.revive((300, 400))
 
@@ -179,6 +207,7 @@ def test_player_revive_restores_health_position_and_respawn_invulnerability():
     assert player.eliminated is False
     assert player.invuln == pytest.approx(config.RESPAWN_INVULN)
     assert player.respawn_timer == 0
+    assert player.damage_residual == 0.0
 
 
 def test_player_update_timers_never_goes_negative():

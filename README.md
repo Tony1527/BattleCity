@@ -29,7 +29,7 @@ Windows 下请将 `.venv/bin/` 替换为 `.venv\Scripts\`。
 .venv/bin/python main.py --seed 42 --width 1280 --height 720
 ```
 
-`--seed` 用于复现同一局关卡与升级随机序列，`--width` / `--height` 用于指定窗口尺寸。
+`--seed` 用于复现同一局的关卡与升级随机序列；不传时每局都会随机生成新的本局种子，同一局内各关的种子由本局种子加上关卡序号得到。`--width` / `--height` 用于指定窗口尺寸。
 
 ## 操作
 

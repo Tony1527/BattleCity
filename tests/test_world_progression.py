@@ -198,6 +198,68 @@ def test_all_steel_spawn_points_fall_back_to_a_non_steel_interior_tile():
     assert world.quota_remaining == 4
 
 
+def test_blocked_configured_spawns_fall_back_to_a_legal_tile():
+    world = wave_world(0)
+    world.quota_remaining = 5
+    world.spawn_quota = 5
+    world.spawn_timer = 0.0
+    for tx, ty in config.ENEMY_SPAWNS:
+        world.grid[ty][tx] = config.Tile.BRICK
+
+    world._update_spawning(0.0)
+
+    assert len(world.enemies) == 1
+    spawn_tile = world.point_to_tile(world.enemies[0].center)
+    assert spawn_tile not in config.ENEMY_SPAWNS
+    assert not world.is_brick(*spawn_tile)
+    assert not world.is_steel(*spawn_tile)
+    assert spawn_tile not in config.BASE_TILES
+    assert spawn_tile not in config.BASE_ENTRANCES
+
+
+def test_fallback_spawn_rejects_base_tiles_and_entrances():
+    world = wave_world(0)
+    for ty in range(1, config.GRID_ROWS - 1):
+        for tx in range(1, config.GRID_COLS - 1):
+            if (tx, ty) in config.BASE_TILES:
+                continue
+            world.grid[ty][tx] = config.Tile.BRICK
+    for tx, ty in config.BASE_TILES:
+        world.grid[ty][tx] = config.Tile.EMPTY
+
+    assert world._fallback_spawn_tile() is None
+
+    world = wave_world(0)
+    for ty in range(1, config.GRID_ROWS - 1):
+        for tx in range(1, config.GRID_COLS - 1):
+            if (tx, ty) in config.BASE_ENTRANCES:
+                continue
+            world.grid[ty][tx] = config.Tile.BRICK
+    for tx, ty in config.BASE_ENTRANCES:
+        world.grid[ty][tx] = config.Tile.EMPTY
+
+    assert world._fallback_spawn_tile() is None
+
+
+def test_fallback_spawn_rejects_occupied_tiles_and_delays_spawn():
+    world = wave_world(0)
+    for ty in range(1, config.GRID_ROWS - 1):
+        for tx in range(1, config.GRID_COLS - 1):
+            world.grid[ty][tx] = config.Tile.BRICK
+    world.grid[5][5] = config.Tile.EMPTY
+    enemy = make_enemy("tracker", (5, 5))
+    world.enemies.append(enemy)
+    world.quota_remaining = 2
+    world.spawn_quota = 2
+    world.spawn_timer = 0.0
+
+    world._update_spawning(0.0)
+
+    assert world._fallback_spawn_tile() is None
+    assert len(world.enemies) == 1
+    assert world.quota_remaining == 2
+
+
 def test_no_spawn_when_no_non_steel_interior_tile_exists():
     world = wave_world(0)
     world.quota_remaining = 5
@@ -306,7 +368,7 @@ def test_boss_arena_is_cleared_at_spawn():
     assert not world.is_brick(*boss_tile)
 
     for ty in range(1, 5):
-        for tx in range(9, 15):
+        for tx in range(6, 18):
             assert world.grid[ty][tx] == config.Tile.EMPTY
 
     assert world.grid[0][12] == config.Tile.STEEL
@@ -314,6 +376,45 @@ def test_boss_arena_is_cleared_at_spawn():
 
     world.boss_laser(boss.center, config.Direction.DOWN)
     assert world.lasers[-1].length > 0.0
+
+
+def test_laser_hits_an_off_center_boss_and_both_drift_extremes():
+    offsets = (30, -config.BOSS_DRIFT_RANGE, config.BOSS_DRIFT_RANGE)
+    for x_offset in offsets:
+        world = combat_world(config.BOSS_LEVEL)
+        boss = world.boss
+        assert boss is not None
+        boss.pos.x = config.PLAYFIELD_RECT.centerx + x_offset
+        player = world.players[0]
+        player.pos = pygame.Vector2(
+            boss.center.x + 30, tile_center(12, 5).y
+        )
+        player.direction = config.Direction.UP
+
+        assert world.fire_laser(player)
+        assert boss.hp == boss.max_hp - player.stats.laser_damage
+
+
+def test_grenade_near_the_boss_edge_damages_it():
+    world = combat_world(config.BOSS_LEVEL)
+    boss = world.boss
+    assert boss is not None
+    radius = config.TILE
+    target = pygame.Vector2(
+        boss.rect.left - 10, boss.center.y
+    )
+    assert target.distance_to(boss.center) > radius
+
+    grenade = Grenade(
+        target,
+        config.Direction.RIGHT,
+        damage=100,
+        radius=radius,
+    )
+    grenade.target = pygame.Vector2(target)
+    world.resolve_grenade(grenade)
+
+    assert boss.hp == boss.max_hp - 100
 
 
 def test_grenade_damages_and_can_kill_the_boss():

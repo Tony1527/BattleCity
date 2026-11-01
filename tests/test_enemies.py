@@ -5,6 +5,7 @@ import pytest
 
 import config
 from game import enemies, entities, geometry
+from game.world import World
 
 
 class FakeWorld:
@@ -304,12 +305,22 @@ def test_gunner_targets_the_base_when_no_player_is_alive():
     assert world.shots == [(gunner, config.Direction.DOWN)]
 
 
-def test_elite_fires_a_three_shot_spread():
+def test_elite_telegraphs_then_fires_a_three_shot_spread():
     player = make_player(tile=(5, 7))
     world = FakeWorld(players=[player])
     elite = enemies.make_enemy("elite", (5, 5))
 
     elite.update(0.1, world)
+
+    assert world.shots == []
+    assert elite.telegraph == pytest.approx(config.ELITE_TELEGRAPH)
+    assert elite.pending_spread == config.Direction.DOWN
+
+    elite.update(config.ELITE_TELEGRAPH - 0.1, world)
+    assert world.shots == []
+    assert elite.telegraph == pytest.approx(0.1)
+
+    elite.update(0.11, world)
 
     directions = [direction for _, direction in world.shots]
     assert len(directions) == config.ELITE_SPREAD_SHOTS
@@ -318,8 +329,11 @@ def test_elite_fires_a_three_shot_spread():
         config.Direction.DOWN,
         config.Direction.LEFT,
     }
-    assert elite.fire_timer == pytest.approx(
-        config.ENEMY_SPECS["gunner"].fire_interval
+    assert elite.pending_spread is None
+    assert (
+        0.0
+        < elite.fire_timer
+        <= config.ENEMY_SPECS["gunner"].fire_interval
     )
 
 
@@ -519,3 +533,31 @@ def test_gunner_adjacent_fallback_uses_an_adjacent_tile(kind):
     assert world.moves
     assert enemy.direction == config.Direction.LEFT
     assert enemy.pos.x < start.x
+
+
+def test_gunner_fires_at_a_brick_blocking_its_reposition_path():
+    world = World(0, seed=3)
+    world.grid = [
+        [config.Tile.EMPTY for _ in range(config.GRID_COLS)]
+        for _ in range(config.GRID_ROWS)
+    ]
+    world.level.grid = world.grid
+    world.quota_remaining = 0
+    world.spawn_quota = 0
+    world.spawn_timer = float("inf")
+    world.max_active = 0
+    world.base.reset_for_level(shield=10_000)
+    world.players[1].alive = False
+    world.players[1].eliminated = True
+    world.players[0].pos = geometry.tile_center(5, 9)
+    world.grid[6][5] = config.Tile.BRICK
+    world.grid[5][4] = config.Tile.BRICK
+    gunner = enemies.make_enemy("gunner", (5, 5))
+    world.enemies.append(gunner)
+
+    for _ in range(600):
+        world.update(1 / 60, [])
+        if not world.is_brick(4, 5):
+            break
+
+    assert not world.is_brick(4, 5)

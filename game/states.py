@@ -53,10 +53,8 @@ class Game:
     def _fresh_levels(self) -> list[dict[str, int]]:
         return [{} for _ in config.PLAYER_SPAWNS]
 
-    def _world_seed(self, level_index: int) -> int | None:
-        if self.seed is None:
-            return None
-        return int(self.seed) + level_index
+    def _world_seed(self, level_index: int) -> int:
+        return self._run_seed + level_index
 
     def _make_world(
         self,
@@ -124,8 +122,9 @@ class Game:
             rng = random.Random(
                 self._run_seed + self.world.level_index * 2 + player_id
             )
+            role = "p1" if player_id == 0 else "p2"
             self.offers[player_id] = roll_upgrades(
-                rng, self.world.upgrade_levels[player_id], 3
+                rng, self.world.upgrade_levels[player_id], 3, role=role
             )
             queue.append(player_id)
 

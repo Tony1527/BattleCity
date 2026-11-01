@@ -7,6 +7,8 @@ import pytest
 
 import config
 from game.audio import Audio
+from game.enemies import make_enemy
+from game.geometry import tile_center
 from game.input import PlayerInput
 from game.levelgen import validate_level
 from game.states import Game
@@ -129,6 +131,83 @@ def test_full_transition_from_title_to_boss_victory(game: Game) -> None:
     assert game.level_index == config.BOSS_LEVEL
 
     game.draw()
+
+
+def combat_world(level: int, seed: int = 77) -> World:
+    world = World(level, seed=seed)
+    world.grid = [
+        [config.Tile.EMPTY for _ in range(config.GRID_COLS)]
+        for _ in range(config.GRID_ROWS)
+    ]
+    world.level.grid = world.grid
+    world.quota_remaining = 0
+    world.spawn_quota = 0
+    world.spawn_timer = float("inf")
+    world.max_active = 0
+    world.base.reset_for_level(shield=1000)
+    return world
+
+
+def test_scripted_bullet_and_grenade_and_laser_kill_a_normal_enemy():
+    stats = config.PlayerStats(bullet_damage=2)
+    world = combat_world(0)
+    world.player_stats[0] = stats
+    player = world.players[0]
+    player.stats = stats
+    player.pos = tile_center(5, 5)
+    player.direction = config.Direction.RIGHT
+    enemy = make_enemy("tracker", (6, 5))
+    world.enemies = [enemy]
+    inputs = [PlayerInput(shoot=True), PlayerInput()]
+
+    for _ in range(120):
+        world.update(1 / 60, inputs)
+        if not enemy.alive:
+            break
+
+    assert not enemy.alive
+
+    grenade_world = combat_world(0)
+    thrower = grenade_world.players[0]
+    thrower.pos = tile_center(5, 5)
+    thrower.direction = config.Direction.RIGHT
+    doomed = make_enemy("tracker", (10, 5))
+    grenade_world.enemies = [doomed]
+
+    assert grenade_world.throw_grenade(thrower)
+    grenade_world.update(config.GRENADE_FLIGHT + 0.01, [])
+
+    assert not doomed.alive
+
+    laser_world = combat_world(0)
+    shooter = laser_world.players[0]
+    shooter.pos = tile_center(5, 5)
+    shooter.direction = config.Direction.RIGHT
+    target = make_enemy("tracker", (7, 5))
+    laser_world.enemies = [target]
+
+    assert laser_world.fire_laser(shooter)
+    laser_world.update(0.0, [])
+
+    assert not target.alive
+
+
+def test_scripted_laser_damages_the_boss_through_world_updates():
+    world = combat_world(config.BOSS_LEVEL)
+    boss = world.boss
+    assert boss is not None
+    player = world.players[0]
+    player.pos = pygame.Vector2(
+        boss.center.x + 30, tile_center(12, 5).y
+    )
+    player.direction = config.Direction.UP
+    start_hp = boss.hp
+
+    assert world.fire_laser(player)
+    world.update(0.0, [])
+
+    assert boss.hp == start_hp - player.stats.laser_damage
+    assert boss.hp < boss.max_hp
 
 
 def test_pause_clears_pending_skill_latch(

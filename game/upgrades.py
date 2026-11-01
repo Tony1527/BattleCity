@@ -15,6 +15,7 @@ class Upgrade:
     op: str
     amount: float
     max_stacks: int
+    roles: frozenset[str] = frozenset({"p1", "p2"})
 
 
 UPGRADE_POOL: tuple[Upgrade, ...] = (
@@ -80,6 +81,7 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
         "mul",
         0.85,
         3,
+        frozenset({"p1"}),
     ),
     Upgrade(
         "demo_charge",
@@ -89,6 +91,7 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
         "add",
         10,
         3,
+        frozenset({"p1"}),
     ),
     Upgrade(
         "wide_blast",
@@ -98,6 +101,7 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
         "mul",
         1.15,
         3,
+        frozenset({"p1"}),
     ),
     Upgrade(
         "split_charge",
@@ -107,6 +111,7 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
         "add",
         1,
         2,
+        frozenset({"p1"}),
     ),
     Upgrade(
         "laser_focus",
@@ -116,6 +121,7 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
         "add",
         15,
         3,
+        frozenset({"p2"}),
     ),
     Upgrade(
         "laser_capacitor",
@@ -125,6 +131,7 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
         "mul",
         0.85,
         3,
+        frozenset({"p2"}),
     ),
     Upgrade(
         "laser_extender",
@@ -134,15 +141,7 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
         "mul",
         1.15,
         3,
-    ),
-    Upgrade(
-        "prism",
-        "Prism",
-        "Laser reflects off steel once per stack.",
-        "laser_reflect",
-        "add",
-        1,
-        2,
+        frozenset({"p2"}),
     ),
     Upgrade(
         "base_shield",
@@ -172,12 +171,16 @@ def upgrade_by_id(upgrade_id: str) -> Upgrade:
 
 
 def roll_upgrades(
-    rng: random.Random, levels: dict[str, int], count: int = 3
+    rng: random.Random,
+    levels: dict[str, int],
+    count: int = 3,
+    role: str | None = None,
 ) -> list[Upgrade]:
     available = [
         upgrade
         for upgrade in UPGRADE_POOL
         if levels.get(upgrade.id, 0) < upgrade.max_stacks
+        and (role is None or role in upgrade.roles)
     ]
     return rng.sample(available, min(count, len(available)))
 

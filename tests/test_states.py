@@ -39,6 +39,42 @@ def test_game_starts_on_title(screen):
     assert game.world is not None
 
 
+def test_default_runs_generate_different_level_zero_grids(screen):
+    first = Game(screen, seed=None, audio=Audio(enabled=False))
+    second = Game(screen, seed=None, audio=Audio(enabled=False))
+
+    assert first.world.seed != second.world.seed
+    assert first.world.grid != second.world.grid
+
+
+def test_explicit_seed_reproduces_level_zero_grid(screen):
+    first = Game(screen, seed=123, audio=Audio(enabled=False))
+    second = Game(screen, seed=123, audio=Audio(enabled=False))
+
+    assert first.world.seed == second.world.seed == 123
+    assert first.world.grid == second.world.grid
+
+
+def test_upgrade_offers_are_role_appropriate(game):
+    start_playing(game)
+    game.world.status = "cleared"
+    game.update(1 / 60)
+
+    grenade_only = {
+        "grenade_tuning",
+        "demo_charge",
+        "wide_blast",
+        "split_charge",
+    }
+    laser_only = {
+        "laser_focus",
+        "laser_capacitor",
+        "laser_extender",
+    }
+    assert not ({offer.id for offer in game.offers[0]} & laser_only)
+    assert not ({offer.id for offer in game.offers[1]} & grenade_only)
+
+
 def test_enter_on_title_opens_controls(game):
     game.handle_event(key_event(config.CONFIRM_KEY))
 

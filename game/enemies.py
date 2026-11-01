@@ -254,7 +254,23 @@ class Enemy:
             self._fire(world, direction)
             return
 
-        self._advance(world, self._reposition_goal(world, player), dt)
+        goal = self._reposition_goal(world, player)
+        current = world.point_to_tile(self.pos)
+        path = world.find_path(current, goal)
+        next_tile = _next_path_tile(path or [], current)
+        if (
+            next_tile is not None
+            and next_tile != current
+            and world.is_brick(*next_tile)
+        ):
+            brick_direction = _direction_between(
+                self.pos, world.tile_center(*next_tile)
+            )
+            if brick_direction is not None:
+                if self._fire(world, brick_direction):
+                    return
+
+        self._advance(world, goal, dt)
 
     def _reposition_goal(self, world, player) -> tuple[int, int]:
         player_tile = world.point_to_tile(player.center)
@@ -361,6 +377,24 @@ class EliteEnemy(Enemy):
         self.shield_timer = config.ELITE_SHIELD_REGEN
         self.summon_timer = config.ELITE_SUMMON_INTERVAL
         self.summons: list[Enemy] = []
+        self.pending_spread: config.Direction | None = None
+
+    def _fire(
+        self,
+        world,
+        direction: config.Direction,
+        interval: float | None = None,
+    ) -> bool:
+        if self.fire_timer > 0.0 or self.telegraph > 0.0:
+            return False
+
+        self.direction = config.Direction(direction)
+        self.pending_spread = self.direction
+        self.telegraph = config.ELITE_TELEGRAPH
+        self.fire_timer = (
+            self.spec.fire_interval if interval is None else interval
+        )
+        return True
 
     def take_damage(self, amount: int, world) -> bool:
         if not self.alive or amount <= 0:
@@ -398,6 +432,16 @@ class EliteEnemy(Enemy):
             world.enemy_fire(self, shot)
 
     def _behave(self, dt: float, world) -> None:
+        if self.telegraph > 0.0:
+            self.telegraph = max(0.0, self.telegraph - dt)
+            if self.telegraph <= 0.0:
+                direction = self.pending_spread or self.direction
+                self.pending_spread = None
+                self._emit_fire(world, direction)
+            self._update_shield(dt)
+            self._update_summons(dt, world)
+            return
+
         super()._behave(dt, world)
         self._update_shield(dt)
         self._update_summons(dt, world)

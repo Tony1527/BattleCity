@@ -385,18 +385,19 @@ def test_enemy_fire_spawns_enemy_bullets_that_damage_players_and_base():
     assert base_world.base.hp == config.BASE_HP - base_enemy.spec.bullet_damage
 
 
-def test_demolisher_blast_damages_players_and_bricks_not_base():
+def test_demolisher_blast_damages_players_bricks_and_the_base():
     world = open_world()
-    enemy = make_enemy("demolisher", (5, 5))
+    enemy = make_enemy("demolisher", (11, 10))
     player = world.players[0]
-    player.pos = tile_center(5, 6)
-    world.grid[5][6] = config.Tile.BRICK
+    player.pos = tile_center(10, 10)
+    player.invuln = 0.0
+    world.grid[10][12] = config.Tile.BRICK
 
     world.demolisher_blast(enemy)
 
     assert player.hp == player.max_hp - config.DEMOLISHER_BLAST_DAMAGE
-    assert not world.is_brick(6, 5)
-    assert world.base.hp == config.BASE_HP
+    assert not world.is_brick(12, 10)
+    assert world.base.hp == config.BASE_HP - config.DEMOLISHER_BLAST_DAMAGE
     assert world.base.alive
 
 

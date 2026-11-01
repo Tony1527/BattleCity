@@ -816,6 +816,28 @@ class Renderer:
                         (center[0], center[1] - radius - 8),
                         align="center",
                     )
+            if (
+                enemy.kind == "elite"
+                and getattr(enemy, "telegraph", 0.0) > 0.0
+            ):
+                pending = getattr(enemy, "pending_spread", None)
+                warn_direction = pending or enemy.direction
+                warn_color = (255, 76, 112)
+                radius = enemy.rect.width // 2 + 9
+                pygame.draw.circle(
+                    self.screen, warn_color, center, radius, 2
+                )
+                self._glow_circle(
+                    warn_color, center, radius + 3, strength=0.35
+                )
+                dx, dy = warn_direction.vector
+                tip = (
+                    center[0] + dx * (radius + 16),
+                    center[1] + dy * (radius + 16),
+                )
+                self._glow_line(
+                    (255, 112, 150), center, tip, width=4, strength=0.5
+                )
             if enemy.kind == "demolisher" and getattr(
                 enemy, "telegraph", 0.0
             ) > 0.0:

@@ -111,6 +111,11 @@ def is_laser_bright(pixel) -> bool:
     return r > 160 and g > 190 and b > 210
 
 
+def is_elite_telegraph(pixel) -> bool:
+    r, g, b = pixel
+    return 240 < r <= 255 and 50 <= g <= 150 and 80 <= b <= 190
+
+
 def is_faded_text(pixel) -> bool:
     r, g, b = pixel
     return r > 80 and g > 90 and b > 100
@@ -424,3 +429,28 @@ def test_draw_world_handles_skills_and_enemies(screen):
         elite_center[0] - 30, elite_center[1] - 14, 60, 28
     )
     assert count_pixels_in_rect(screen, shield_band, is_shield_cyan) > 20
+
+
+def test_draw_world_draws_elite_telegraph_warning(screen):
+    world = World(3, seed=1)
+    elite = next(
+        enemy for enemy in world.enemies if enemy.kind == "elite"
+    )
+    elite.pos = pygame.Vector2(600, 300)
+    elite.direction = config.Direction.DOWN
+    elite.pending_spread = config.Direction.DOWN
+    elite.telegraph = config.ELITE_TELEGRAPH
+    elite.shield = 0
+    world.effects.shake_amount = 0.0
+    renderer = render.Renderer(screen)
+
+    renderer.draw_world(world)
+
+    region = pygame.Rect(550, 250, 100, 100)
+    inner = pygame.Rect(582, 282, 36, 36)
+    assert (
+        count_pixels_in_rect(
+            screen, region, is_elite_telegraph, exclude=inner
+        )
+        > 20
+    )
