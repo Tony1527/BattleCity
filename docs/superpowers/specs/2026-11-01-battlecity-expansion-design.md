@@ -19,7 +19,7 @@
 ## 2. 目标
 
 - 地图上出现三类拾取物：回血、低概率无敌、角色技能强化。
-- 失败后可以重打当前关，保留升级、复活次数和基地状态；基地被摧毁时修复满血。
+- 失败后可以重打当前关，保留升级；玩家无限次复活，基地被摧毁时修复满血。
 - 地图加入河流、桥梁和 3 秒定身陷阱，全部不可被子弹/激光/手榴弹破坏。
 - 提高普通难度的刷怪速度。
 - 每关都有精英怪，后期数量更多；精英仍不占普通敌人配额。
@@ -39,7 +39,7 @@
 ## 4. 反目标（即使能跑也算失败）
 
 - 河流把基地或出生点切成无法到达的孤岛，或让关卡只剩一条路线。
-- 重打时基地 0 血、复活次数 0 导致一进关就失败。
+- 重打时基地 0 血导致一进关就失败。
 - 中文界面出现方框、缺字、文字溢出或中英文混排错位。
 - 地狱难度只是敌人血更厚，攻击欲望和刷怪节奏没有变化。
 - 拾取物可以无限叠加，导致无敌或双激光常驻。
@@ -81,20 +81,18 @@ class RunState:
     level_index: int
     player_stats: list[PlayerStats]
     upgrade_levels: list[dict[str, int]]
-    shared_lives: int
 ```
 
-- 新开一局：生成新的 `run_seed`，清零等级/升级/复活，难度和语言取主页当前选择。
-- 进入下一关：沿用 `run_seed`、难度、语言、`player_stats`、`upgrade_levels`；共享复活次数按现有规则重置为 `SHARED_LIVES + extra_lives`；基地满血。
-- 失败重试：沿用 `run_seed`、`level_index`、`player_stats`、`upgrade_levels`、`shared_lives`；用同一关种子重建地图和敌人；玩家以满血、存活状态开始；基地按 7.2 处理。
+- 新开一局：生成新的 `run_seed`，清零等级/升级，难度和语言取主页当前选择。
+- 进入下一关：沿用 `run_seed`、难度、语言、`player_stats`、`upgrade_levels`；基地满血。
+- 失败重试：沿用 `run_seed`、`level_index`、`player_stats`、`upgrade_levels`；用同一关种子重建地图和敌人；玩家以满血、存活状态开始；基地恢复满血。
 - 退回主页：丢弃当前 `RunState`；主页保留难度和语言选择。
 
 ### 7.2 失败与重试规则
 
-失败条件保持现有两种：
+失败条件只有一种：
 
 - 基地 HP 归零。
-- 两名玩家都被淘汰（共享复活次数已耗尽，且都在当前关出局）。
 
 失败后进入 `gameover` 状态，显示失败原因、当前关卡和剩余敌人数。
 
@@ -104,11 +102,8 @@ class RunState:
 重打规则：
 
 - **升级保留**：`PlayerStats` 和 `upgrade_levels` 原样带入。
-- **共享复活次数保留**：使用失败时的 `shared_lives`，不重置为 3。
-- **玩家状态重置**：两名玩家都以满血、存活、无淘汰状态开始新尝试；即使 `shared_lives == 0` 也如此。这样不会出现“0 复活次数 + 两人出局”一进关就再次失败的死锁。
-- **基地状态**：
-  - 失败原因是“两名玩家都被淘汰”时，基地保留失败时的当前 HP 和护盾。
-  - 失败原因是“基地被摧毁”时，基地修复到满血，护盾按升级重新应用。
+- **玩家状态重置**：两名玩家都以满血、存活状态开始新尝试；玩家被击毁后会无限次复活。
+- **基地状态**：基地修复到满血，护盾按升级重新应用。
 - **关卡内容重置**：敌人、Boss、子弹、手榴弹、激光、拾取物、陷阱冷却、粒子全部重建；地图使用同一关种子，所以布局不变。
 - 重试不消耗额外资源，也没有次数上限。
 
@@ -117,7 +112,7 @@ class RunState:
 - 普通关的过关条件：普通配额全部刷出并消灭、本关计划的所有精英都已生成并消灭、场上无敌人。普通配额提前清空时，尚未生成的精英立即进入待生成队列，不再等待 22 秒；受“同时最多 2 个精英”限制时，腾出位置后立刻补齐。
 - 精英计入 `remaining_enemies`，所以 HUD 不会在精英还没出现时显示 0。
 - Boss 关：击败 Boss 即胜利，Boss 关的精英不要求先死；Boss 死亡时清场。
-- 通关后进入下一关，共享复活次数按现有规则重置，基地满血。
+- 通关后进入下一关，基地满血。
 - 胜利界面 `Enter` 开新局，`Esc` 回主页。
 
 ## 8. 难度
@@ -164,7 +159,7 @@ class DifficultyProfile:
 | 精英护盾 | x1.0 | x1.5，向上取整 |
 
 - 地狱不提高敌人子弹伤害，避免一次失误直接秒杀。
-- 玩家 HP、共享复活、技能冷却和升级池不受难度影响。
+- 玩家 HP、技能冷却和升级池不受难度影响。
 - 关卡本身的递进（配额、敌人种类、精英数量）继续存在；地狱是在此之上再乘一层。
 - **缩放不叠乘**：普通敌人使用 `enemy_hp_mult`；精英使用自己的 `elite_hp_mult` / `elite_shield_mult`，不再额外乘 `enemy_hp_mult`。精英的开火间隔和攻击距离仍使用 `enemy_fire_interval_mult` / `enemy_attack_range_mult`。精英召唤出的追踪者属于普通敌人，使用 `enemy_hp_mult`。
 - `EnemySpec` 在生成敌人时按难度复制并缩放，不修改全局冻结模板。
@@ -423,7 +418,7 @@ def tr(language: str, key: str, **kwargs) -> str: ...
 
 ### 13.4 失败页
 
-- 本地化失败原因：基地被摧毁 / 两名坦克都被淘汰。
+- 本地化失败原因：基地被摧毁。
 - 显示关卡、剩余敌人、当前难度。
 - `Enter` 重打当前关；`Esc` 返回主页。
 - 不再显示“从第 1 关重开”。
@@ -437,7 +432,7 @@ def tr(language: str, key: str, **kwargs) -> str: ...
 
 ### 14.1 新增/调整模块
 
-- `game/run.py`（新）：`RunState`，负责整局种子、难度、语言、等级、玩家成长和复活次数。
+- `game/run.py`（新）：`RunState`，负责整局种子、难度、语言、等级和玩家成长。
 - `game/difficulty.py`（新）：`DifficultyProfile`、普通/地狱常量、应用缩放的工具函数。
 - `game/i18n.py`（新）：翻译表、`tr`、key 校验。
 - `game/pickups.py`（新）：`Pickup` 数据类、类型枚举、生成权重、拾取效果入口。
@@ -458,7 +453,7 @@ def tr(language: str, key: str, **kwargs) -> str: ...
 
 - `Game.__init__(..., difficulty="normal", language="zh")`：测试可直接构造。
 - `Game._retry_level()`：用当前 `RunState` 重建当前关；失败原因是基地摧毁时修复基地。
-- `World(..., difficulty: DifficultyProfile, shared_lives: int | None = None, base_hp: int | None = None, base_shield: int | None = None)`：`base_hp` 是当前 HP（`None` 表示满血），最大 HP 仍由难度决定；`base_shield` 是当前护盾（`None` 表示按升级重新应用）。这样重试可以精确恢复“玩家全灭但基地未毁”时的基地状态。
+- `World(..., difficulty: DifficultyProfile | str = "normal")`：`base_hp`/`base_shield` 仍保留为测试与构造参数，但正常失败重试只发生在基地被毁时，重试恢复满血基地。
 - `World.traps: list[Trap]`、`World.pickups: list[Pickup]`。
 - `Player.immobilized: float`、`Player.stim_timer: float`、`Player.invincible_timer: float`。
 - `Enemy.immobilized: float`；`Boss` 不读取该字段。
@@ -511,7 +506,7 @@ def tr(language: str, key: str, **kwargs) -> str: ...
 ### 16.1 新增测试
 
 - **难度**：普通/地狱的敌人 HP、开火间隔、攻击距离、刷怪间隔、基地 HP、Boss HP 缩放正确；普通默认不变。
-- **重试**：失败后 `Enter` 重建同一关、同种子；升级/复活/基地状态按规则保留；基地摧毁后满血；`Esc` 回主页；0 复活次数不会立刻失败。
+- **重试**：失败后 `Enter` 重建同一关、同种子；升级保留；基地恢复满血；`Esc` 回主页；玩家无限次复活。
 - **地形**：河流阻挡坦克但不挡子弹/激光/手榴弹；桥可通过；陷阱格可通过；`find_path` 绕开河流走桥；激光/子弹在河流上不截断。
 - **生成**：所有 8 关通过 `validate_level`；河流不切断基地；每关至少 3 条路线；Boss 关无河流；兜底地图有效。
 - **陷阱**：触发后 3 秒不能移动/开火；5 秒后重新就绪；敌人可被定身；Boss 免疫；陷阱不可破坏。
@@ -528,7 +523,7 @@ def tr(language: str, key: str, **kwargs) -> str: ...
 - 中英文切换在主页、操作说明、HUD、升级、失败、暂停、胜利页都可见。
 - 所有 8 关在普通和地狱下都能生成、校验、运行。
 - 河流/桥梁/陷阱在画面上可读，玩家不需要看文档就知道能不能走。
-- 重试后升级和复活次数确实保留，基地按失败原因处理。
+- 重试后升级确实保留，基地恢复满血；玩家无限次复活。
 - 帧率维持 60 FPS 目标，无明显卡顿。
 
 ## 17. 风险与取舍

@@ -55,7 +55,6 @@ class World:
         player_stats: list[config.PlayerStats] | None = None,
         upgrade_levels: list[dict[str, int]] | None = None,
         difficulty: str = "normal",
-        shared_lives: int | None = None,
         base_hp: int | None = None,
         base_shield: int | None = None,
     ) -> None:
@@ -120,12 +119,6 @@ class World:
 
         self.base = Base(
             config.BASE_TILES, max_hp=self.difficulty.base_hp
-        )
-        self.shared_lives = (
-            config.SHARED_LIVES
-            + sum(stats.extra_lives for stats in self.player_stats)
-            if shared_lives is None
-            else max(0, int(shared_lives))
         )
         starting_shield = (
             sum(stats.base_shield for stats in self.player_stats)
@@ -301,7 +294,7 @@ class World:
         ]
 
         for player in self.players:
-            if not player.alive or player.eliminated:
+            if not player.alive:
                 continue
             for pickup in list(self.pickups):
                 if not player.rect.colliderect(pickup.rect):
@@ -333,7 +326,7 @@ class World:
         return (96, 232, 144)
 
     def _apply_pickup(self, player: Player, pickup: Pickup) -> bool:
-        if player is None or not player.alive or player.eliminated:
+        if player is None or not player.alive:
             return False
         if pickup.kind == "repair":
             if player.hp >= player.max_hp:
@@ -477,14 +470,7 @@ class World:
         )
         self.effects.shake(4.0)
 
-        if self.shared_lives > 0:
-            self.shared_lives -= 1
-            player.respawn_timer = config.RESPAWN_DELAY
-        else:
-            player.eliminated = True
-            player.respawn_timer = 0.0
-
-        self._check_defeat()
+        player.respawn_timer = config.RESPAWN_DELAY
 
     def damage_base(self, amount: int) -> None:
         if amount <= 0 or not self.base.alive:
@@ -601,7 +587,7 @@ class World:
             self.destroy_brick(*beam.brick_tile)
 
         for player in self.players:
-            if not player.alive or player.eliminated:
+            if not player.alive:
                 continue
             if not point_near_segment(
                 player.center,
@@ -697,7 +683,6 @@ class World:
         for player in self.players:
             if (
                 player.alive
-                and not player.eliminated
                 and player.rect.colliderect(tile)
             ):
                 return True
@@ -723,7 +708,6 @@ class World:
         for player in self.players:
             if (
                 player.alive
-                and not player.eliminated
                 and center.distance_to(player.center) <= radius
             ):
                 self.damage_player(player, config.DEMOLISHER_BLAST_DAMAGE)
@@ -747,7 +731,6 @@ class World:
         if (
             player is None
             or not player.alive
-            or player.eliminated
             or player.immobilized > 0.0
             or player.grenade_timer > 0.0
         ):
@@ -778,7 +761,6 @@ class World:
         if (
             player is None
             or not player.alive
-            or player.eliminated
             or player.immobilized > 0.0
             or player.laser_timer > 0.0
         ):
@@ -954,7 +936,7 @@ class World:
                 self._damage_boss(grenade.damage)
 
             for player in self.players:
-                if not player.alive or player.eliminated:
+                if not player.alive:
                     continue
                 if id(player) in hit_players:
                     continue
@@ -1245,7 +1227,7 @@ class World:
 
     def _respawn_players(self) -> None:
         for player in self.players:
-            if player.alive or player.eliminated:
+            if player.alive:
                 continue
             if player.respawn_timer > 0.0:
                 continue
@@ -1263,7 +1245,7 @@ class World:
         for player_id, player in enumerate(self.players):
             if player_id >= len(inputs):
                 break
-            if not player.alive or player.eliminated:
+            if not player.alive:
                 continue
             player_input = inputs[player_id]
             if player_input is None:
@@ -1367,7 +1349,7 @@ class World:
             return False
 
         for player in self.players:
-            if not player.alive or player.eliminated:
+            if not player.alive:
                 continue
             if not bullet.rect.colliderect(player.rect):
                 continue
@@ -1433,9 +1415,4 @@ class World:
         if self.status != "playing":
             return
         if not self.base.alive:
-            self.status = "lost"
-            return
-        if self.players and all(
-            player.eliminated for player in self.players
-        ):
             self.status = "lost"

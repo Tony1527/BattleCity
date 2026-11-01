@@ -94,7 +94,6 @@ def test_player_stats_defaults_match_spec():
     assert stats.laser_cooldown == 5.0
     assert stats.laser_damage == 60
     assert stats.laser_range == 384.0
-    assert stats.extra_lives == 0
     assert stats.base_shield == 0
     assert stats.grenade_split == 0
     assert stats.laser_reflect == 0
@@ -114,7 +113,6 @@ def test_player_stats_field_order_and_clone():
         "laser_cooldown",
         "laser_damage",
         "laser_range",
-        "extra_lives",
         "base_shield",
         "grenade_split",
         "laser_reflect",

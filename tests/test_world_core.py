@@ -75,10 +75,10 @@ def test_draw_renders_particles_on_a_headless_surface():
     assert surface.get_at((160, 120))[:3] != (0, 0, 0)
 
 
-def test_world_constructs_level_players_base_and_shared_lives():
+def test_world_constructs_level_players_base_and_stats():
     stats = [
-        config.PlayerStats(max_hp=4, extra_lives=1, base_shield=2),
-        config.PlayerStats(extra_lives=2, base_shield=1),
+        config.PlayerStats(max_hp=4, base_shield=2),
+        config.PlayerStats(base_shield=1),
     ]
 
     world = World(2, seed=7, player_stats=stats)
@@ -93,7 +93,6 @@ def test_world_constructs_level_players_base_and_shared_lives():
     assert [player.player_id for player in world.players] == [0, 1]
     assert world.base.hp == config.BASE_HP
     assert world.base.shield == 3
-    assert world.shared_lives == config.SHARED_LIVES + 1 + 2
     assert world.quota_remaining == config.ENEMY_QUOTA[2]
     assert world.elapsed == 0.0
     assert [enemy.kind for enemy in world.enemies] == ["elite"]
@@ -108,8 +107,6 @@ def test_world_constructs_level_players_base_and_shared_lives():
 def test_world_defaults_match_spec_literals():
     world = World(0, seed=1)
 
-    assert config.SHARED_LIVES == 3
-    assert world.shared_lives == 3
     assert config.BASE_HP == 3
     assert world.base.max_hp == 3
     assert world.base.hp == 3
@@ -447,7 +444,7 @@ def test_bullets_resolve_before_enemies_move():
     assert enemy.hp == enemy.max_hp - 1
 
 
-def test_destroyed_player_consumes_shared_life_and_respawns_invulnerable():
+def test_destroyed_player_respawns_invulnerable_without_limit():
     world = open_world()
     player = world.players[0]
     player.hp = 1
@@ -456,8 +453,6 @@ def test_destroyed_player_consumes_shared_life_and_respawns_invulnerable():
     world.damage_player(player, 1)
 
     assert not player.alive
-    assert not player.eliminated
-    assert world.shared_lives == config.SHARED_LIVES - 1
     assert player.respawn_timer == pytest.approx(config.RESPAWN_DELAY)
 
     world.update(config.RESPAWN_DELAY, [])
@@ -474,43 +469,26 @@ def test_damage_player_ignores_an_already_dead_player():
     player.alive = False
     player.hp = 0
     player.respawn_timer = config.RESPAWN_DELAY
-    lives = world.shared_lives
 
     world.damage_player(player, 1)
 
-    assert world.shared_lives == lives
     assert player.respawn_timer == pytest.approx(config.RESPAWN_DELAY)
-    assert not player.eliminated
 
 
-def test_destroyed_player_with_no_shared_lives_is_eliminated():
+def test_both_players_dying_does_not_end_the_run():
     world = open_world()
-    world.shared_lives = 0
-    player = world.players[0]
-    player.hp = 1
-    player.invuln = 0.0
-
-    world.damage_player(player, 1)
-
-    assert not player.alive
-    assert player.eliminated
-    assert world.shared_lives == 0
-
-    world.update(10.0, [])
-    assert not player.alive
-
-
-def test_both_players_eliminated_sets_status_lost():
-    world = open_world()
-    world.shared_lives = 0
 
     for player in world.players:
         player.hp = 1
         player.invuln = 0.0
         world.damage_player(player, 1)
 
-    assert all(player.eliminated for player in world.players)
-    assert world.status == "lost"
+    assert all(not player.alive for player in world.players)
+    assert world.status == "playing"
+
+    world.update(config.RESPAWN_DELAY, [])
+
+    assert all(player.alive for player in world.players)
 
 
 def test_base_destroyed_sets_status_lost():
@@ -646,3 +624,16 @@ def test_tile_helpers_round_trip():
 
     assert world.point_to_tile(tile_center(3, 4)) == (3, 4)
     assert world.tile_center(3, 4) == tile_center(3, 4)
+
+
+def test_player_respawns_after_every_death_without_limit():
+    world = open_world()
+    player = world.players[0]
+
+    for _ in range(5):
+        player.hp = 1
+        player.invuln = 0.0
+        world.damage_player(player, 1)
+        assert not player.alive
+        world.update(config.RESPAWN_DELAY, [])
+        assert player.alive

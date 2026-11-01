@@ -152,15 +152,6 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
         1,
         2,
     ),
-    Upgrade(
-        "spare_parts",
-        "upgrade.spare_parts.name",
-        "upgrade.spare_parts.desc",
-        "extra_lives",
-        "add",
-        1,
-        2,
-    ),
 )
 
 _BY_ID = {upgrade.id: upgrade for upgrade in UPGRADE_POOL}

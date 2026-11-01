@@ -110,7 +110,6 @@ def test_player_starts_with_stats_health_and_hitbox():
     assert player.direction == config.Direction.UP
     assert player.hp == 4
     assert player.alive is True
-    assert player.eliminated is False
     assert player.invuln == 0
     assert player.respawn_timer == 0
     assert player.fire_timer == 0
@@ -204,7 +203,6 @@ def test_player_revive_restores_health_position_and_respawn_invulnerability():
     assert player.pos == pygame.Vector2(300, 400)
     assert player.hp == 5
     assert player.alive is True
-    assert player.eliminated is False
     assert player.invuln == pytest.approx(config.RESPAWN_INVULN)
     assert player.respawn_timer == 0
     assert player.damage_residual == 0.0

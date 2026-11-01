@@ -9,7 +9,7 @@ from game import upgrades
 
 def test_pool_ids_are_unique_and_cover_required_upgrades():
     ids = [upgrade.id for upgrade in upgrades.UPGRADE_POOL]
-    assert len(upgrades.UPGRADE_POOL) >= 15
+    assert len(upgrades.UPGRADE_POOL) >= 14
     assert len(set(ids)) == len(ids)
     assert set(ids) == {
         "overclock",
@@ -26,7 +26,6 @@ def test_pool_ids_are_unique_and_cover_required_upgrades():
         "laser_capacitor",
         "laser_extender",
         "base_shield",
-        "spare_parts",
     }
 
 
@@ -79,11 +78,11 @@ def test_roll_upgrades_returns_only_available_count():
         upgrade.id: upgrade.max_stacks
         for upgrade in upgrades.UPGRADE_POOL
     }
-    levels["spare_parts"] = (
-        upgrades.upgrade_by_id("spare_parts").max_stacks - 1
+    levels["base_shield"] = (
+        upgrades.upgrade_by_id("base_shield").max_stacks - 1
     )
     offers = upgrades.roll_upgrades(random.Random(1), levels, count=3)
-    assert [upgrade.id for upgrade in offers] == ["spare_parts"]
+    assert [upgrade.id for upgrade in offers] == ["base_shield"]
 
 
 def test_fire_interval_multiplier_caps_after_three_stacks():

@@ -30,31 +30,9 @@ def start_playing(game: Game) -> None:
     assert game.state == "playing"
 
 
-def test_player_elimination_retry_preserves_upgrades_lives_and_base(game):
+def test_base_destroyed_retry_preserves_upgrades_and_restores_base(game):
     start_playing(game)
     game.world.apply_upgrade(0, "heavy_rounds")
-    game.world.shared_lives = 0
-    game.world.base.hp = 1
-    game.world.base.shield = 2
-    game.world.players[0].eliminated = True
-    game.world.players[1].eliminated = True
-    game.update(1 / 60)
-    assert game.state == "gameover"
-    assert game.reason == "gameover.both_eliminated"
-
-    game.handle_event(key_event(config.CONFIRM_KEY))
-
-    assert game.state == "playing"
-    assert game.level_index == 0
-    assert game.world.upgrade_levels[0]["heavy_rounds"] == 1
-    assert game.world.shared_lives == 0
-    assert game.world.base.hp == 1
-    assert game.world.base.shield == 2
-    assert all(p.alive and not p.eliminated for p in game.world.players)
-
-
-def test_base_destroyed_retry_restores_full_base(game):
-    start_playing(game)
     game.world.base.hp = 0
     game.world.base.alive = False
     game.update(1 / 60)
@@ -65,6 +43,7 @@ def test_base_destroyed_retry_restores_full_base(game):
     assert game.world.base.alive is True
     assert game.world.base.hp == game.world.base.max_hp
     assert game.world.level_index == 0
+    assert game.world.upgrade_levels[0]["heavy_rounds"] == 1
 
 
 def test_gameover_escape_returns_to_title(game):
@@ -78,7 +57,6 @@ def test_gameover_escape_returns_to_title(game):
 def test_capture_run_state_records_progression(game):
     start_playing(game)
     game.world.apply_upgrade(0, "heavy_rounds")
-    game.world.shared_lives = 2
 
     state = game._capture_run_state()
 
@@ -88,7 +66,6 @@ def test_capture_run_state_records_progression(game):
     assert state.language == "zh"
     assert state.level_index == 0
     assert state.upgrade_levels[0]["heavy_rounds"] == 1
-    assert state.shared_lives == 2
     assert state.player_stats[0].bullet_damage == 2
 
 

@@ -87,7 +87,6 @@ class PlayerStats:
     laser_cooldown: float = 5.0
     laser_damage: int = 60
     laser_range: float = 8 * TILE
-    extra_lives: int = 0
     base_shield: int = 0
     grenade_split: int = 0
     laser_reflect: int = 0
@@ -125,7 +124,6 @@ PLAYER_BULLET_DAMAGE = 1
 HIT_INVULN = 0.5
 RESPAWN_DELAY = 3.0
 RESPAWN_INVULN = 2.0
-SHARED_LIVES = 3
 
 BASE_HP_NORMAL = 3
 BASE_HP_HELL = 6

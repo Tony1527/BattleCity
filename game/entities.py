@@ -107,7 +107,6 @@ class Player:
         self.stats = stats if stats is not None else config.PlayerStats()
         self.hp = self.stats.max_hp
         self.alive = True
-        self.eliminated = False
         self.invuln = 0.0
         self.respawn_timer = 0.0
         self.fire_timer = 0.0
@@ -148,7 +147,6 @@ class Player:
     def can_shoot(self) -> bool:
         return (
             self.alive
-            and not self.eliminated
             and self.fire_timer <= 0
             and self.immobilized <= 0.0
         )
@@ -186,7 +184,6 @@ class Player:
         self.pos = pygame.Vector2(pos)
         self.hp = self.stats.max_hp
         self.alive = True
-        self.eliminated = False
         self.invuln = config.RESPAWN_INVULN
         self.respawn_timer = 0.0
         self.immobilized = 0.0

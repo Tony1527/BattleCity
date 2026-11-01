@@ -144,56 +144,6 @@ def test_players_choose_upgrades_in_order_then_next_level(game):
     assert game.world.upgrade_levels[1][second_offers[0].id] == 1
 
 
-def test_eliminated_player_is_skipped_for_upgrades(game):
-    start_playing(game)
-    game.world.players[0].eliminated = True
-    game.world.players[0].alive = False
-    game.world.status = "cleared"
-
-    game.update(1 / 60)
-
-    assert game.state == "upgrade"
-    assert game.chooser == 1
-    assert game.offers[0] == []
-    assert len(game.offers[1]) == 3
-
-    chosen = game.offers[1][0]
-    game.handle_event(key_event(config.CHOICE_KEYS[0]))
-
-    assert game.state == "playing"
-    assert game.level_index == 1
-    assert game.world.upgrade_levels[0] == {}
-    assert game.world.upgrade_levels[1][chosen.id] == 1
-    assert game.world.players[0].eliminated is False
-    assert game.world.players[0].alive is True
-
-
-def test_eliminated_player_returns_alive_next_level_with_reset_lives(game):
-    start_playing(game)
-    game.world.players[0].eliminated = True
-    game.world.players[0].alive = False
-    game.world.shared_lives = 0
-    game.world.status = "cleared"
-
-    game.update(1 / 60)
-
-    assert game.state == "upgrade"
-    assert game.chooser == 1
-    chosen = game.offers[1][0]
-    game.handle_event(key_event(config.CHOICE_KEYS[0]))
-
-    assert game.state == "playing"
-    assert game.level_index == 1
-    assert game.world.upgrade_levels[1][chosen.id] == 1
-    for player in game.world.players:
-        assert player.alive is True
-        assert player.eliminated is False
-    expected_lives = config.SHARED_LIVES + sum(
-        stats.extra_lives for stats in game.world.player_stats
-    )
-    assert game.world.shared_lives == expected_lives
-
-
 def test_loss_enters_gameover_and_enter_retries_current_level(game):
     start_playing(game)
     game.world.apply_upgrade(0, "heavy_rounds")
@@ -203,7 +153,7 @@ def test_loss_enters_gameover_and_enter_retries_current_level(game):
     game.update(1 / 60)
 
     assert game.state == "gameover"
-    assert game.reason == "gameover.both_eliminated"
+    assert game.reason == "gameover.base_destroyed"
 
     game.handle_event(key_event(config.CONFIRM_KEY))
 

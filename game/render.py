@@ -48,7 +48,6 @@ _BOSS_PHASE_COLORS = {
     2: (255, 146, 64),
     3: (226, 96, 255),
 }
-_REVIVE_DIAMOND = (208, 238, 250)
 _RIVER_DEEP = (12, 34, 56)
 _RIVER_MID = (18, 52, 82)
 _RIVER_WAVE = (64, 158, 198)
@@ -1112,7 +1111,7 @@ class Renderer:
                 int(player.pos.x + ox),
                 int(player.pos.y + oy),
             )
-            if player.alive and not player.eliminated:
+            if player.alive:
                 self._draw_tank(
                     player.pos,
                     player.rect.width,
@@ -1164,7 +1163,7 @@ class Renderer:
                         radius + 4,
                         strength=0.3 + 0.2 * pulse,
                     )
-            elif not player.eliminated:
+            elif not player.alive:
                 pygame.draw.circle(
                     self.screen, _scale(color, 0.65), center, 16, 1
                 )
@@ -1596,12 +1595,11 @@ class Renderer:
         top = self.hud_rect.top + _HUD_INNER_Y
         scale = self.width / 1280.0
         specs = (
-            (12, 280),
-            (304, 280),
-            (596, 120),
-            (724, 180),
-            (912, 240),
-            (1164, 102),
+            (12, 300),
+            (324, 300),
+            (636, 200),
+            (848, 280),
+            (1140, 128),
         )
         rects = []
         for x, width in specs:
@@ -1635,10 +1633,9 @@ class Renderer:
         cards = self._hud_rects()
         for index, player in enumerate(world.players[:2]):
             self._draw_player_card(player, cards[index])
-        self._draw_revives(world, cards[2])
-        self._draw_base_hud(world, cards[3])
-        self._draw_level_track(world, cards[4])
-        self._draw_enemy_counter(world, cards[5])
+        self._draw_base_hud(world, cards[2])
+        self._draw_level_track(world, cards[3])
+        self._draw_enemy_counter(world, cards[4])
 
     def _draw_player_card(self, player, rect: pygame.Rect) -> None:
         color = (
@@ -1662,9 +1659,7 @@ class Renderer:
             (rect.left + 48, rect.top + 9),
         )
 
-        if player.eliminated:
-            status, status_color = self.tr("hud.eliminated"), (220, 110, 110)
-        elif not player.alive:
+        if not player.alive:
             status = self.tr(
                 "hud.respawn", seconds=player.respawn_timer
             )
@@ -1704,7 +1699,6 @@ class Renderer:
                 player.grenade_timer,
                 player.stats.grenade_cooldown,
                 color,
-                player.eliminated,
             )
         else:
             self._draw_cooldown(
@@ -1714,7 +1708,6 @@ class Renderer:
                 player.laser_timer,
                 player.stats.laser_cooldown,
                 color,
-                player.eliminated,
             )
         self._draw_buff_chips(player, rect, color)
 
@@ -1795,7 +1788,6 @@ class Renderer:
         remaining: float,
         cooldown: float,
         color: tuple[int, ...],
-        eliminated: bool,
     ) -> None:
         self._text(
             label,
@@ -1808,8 +1800,6 @@ class Renderer:
         ratio = 1.0
         if cooldown > 0.0:
             ratio = 1.0 - max(0.0, min(1.0, remaining / cooldown))
-        if eliminated:
-            ratio = 0.0
         fill = bar.copy()
         fill.width = int(bar.width * ratio)
         if fill.width > 0:
@@ -1820,47 +1810,6 @@ class Renderer:
         pygame.draw.rect(
             self.screen, _scale(color, 0.4), bar, 1, border_radius=3
         )
-
-    def _draw_revives(self, world, rect: pygame.Rect) -> None:
-        self._panel(rect, fill=_HUD_PANEL, border=_HUD_BORDER)
-        self._text(
-            self.tr("hud.revive"),
-            self.font_xs,
-            _HUD_MUTED,
-            (rect.centerx, rect.top + 9),
-            align="center",
-        )
-        count = max(0, int(world.shared_lives))
-        shown = min(count, 6)
-        if shown == 0:
-            self._diamond(
-                (rect.centerx, rect.top + 38), 7, (58, 72, 88), 1
-            )
-        else:
-            gap = 16 if shown <= 3 else 13
-            start = rect.centerx - (shown - 1) * gap / 2
-            for index in range(shown):
-                self._diamond(
-                    (start + index * gap, rect.top + 36),
-                    6,
-                    _REVIVE_DIAMOND,
-                )
-        if count > shown:
-            self._text(
-                self.tr("hud.revive_extra", count=count - shown),
-                self.font_xs,
-                _REVIVE_DIAMOND,
-                (rect.centerx, rect.top + 53),
-                align="center",
-            )
-        else:
-            self._text(
-                self.tr("hud.revive_count", count=count),
-                self.font_xs,
-                _HUD_MUTED,
-                (rect.centerx, rect.top + 54),
-                align="center",
-            )
 
     def _draw_base_hud(self, world, rect: pygame.Rect) -> None:
         base = world.base
@@ -2547,19 +2496,11 @@ class Renderer:
             (cx, cy + 78),
             align="center",
         )
-        shared = getattr(world, "shared_lives", 0)
-        self._text(
-            self.tr("victory.revives", count=shared),
-            self.font_s,
-            (150, 200, 226),
-            (cx, cy + 126),
-            align="center",
-        )
         self._text(
             self.tr("victory.epilogue"),
             self.font_s,
             (126, 164, 192),
-            (cx, cy + 158),
+            (cx, cy + 126),
             align="center",
         )
         self._text(

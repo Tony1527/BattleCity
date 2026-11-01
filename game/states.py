@@ -72,9 +72,6 @@ class Game:
         stats: list[config.PlayerStats],
         levels: list[dict[str, int]],
         *,
-        shared_lives: int | None = None,
-        base_hp: int | None = None,
-        base_shield: int | None = None,
         difficulty: str | None = None,
     ) -> World:
         return World(
@@ -83,9 +80,6 @@ class Game:
             player_stats=stats,
             upgrade_levels=levels,
             difficulty=self.difficulty if difficulty is None else difficulty,
-            shared_lives=shared_lives,
-            base_hp=base_hp,
-            base_shield=base_shield,
         )
 
     def _capture_run_state(self) -> RunState:
@@ -99,23 +93,15 @@ class Game:
             upgrade_levels=[
                 dict(levels) for levels in world.upgrade_levels
             ],
-            shared_lives=world.shared_lives,
         )
 
     def _retry_level(self) -> None:
         state = self._capture_run_state()
-        base = self.world.base
-        base_hp = base.hp if base.alive else None
-        base_shield = base.shield if base.alive else None
-
         self.level_index = state.level_index
         self.world = self._make_world(
             state.level_index,
             state.player_stats,
             state.upgrade_levels,
-            shared_lives=state.shared_lives,
-            base_hp=base_hp,
-            base_shield=base_shield,
             difficulty=state.difficulty,
         )
         self.state = "playing"
@@ -173,8 +159,6 @@ class Game:
         self.offers = [[], []]
         queue: list[int] = []
         for player in self.world.players:
-            if player.eliminated:
-                continue
             player_id = player.player_id
             rng = random.Random(
                 self._run_seed + self.world.level_index * 2 + player_id
@@ -214,9 +198,7 @@ class Game:
             self._advance_level()
 
     def _loss_reason(self) -> str:
-        if not self.world.base.alive:
-            return "gameover.base_destroyed"
-        return "gameover.both_eliminated"
+        return "gameover.base_destroyed"
 
     def _toggle_language(self) -> None:
         keys = list(i18n.LANGUAGES)

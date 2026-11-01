@@ -583,7 +583,6 @@ def test_gunner_fires_at_a_brick_blocking_its_reposition_path():
     world.max_active = 0
     world.base.reset_for_level(shield=10_000)
     world.players[1].alive = False
-    world.players[1].eliminated = True
     world.players[0].pos = geometry.tile_center(5, 9)
     world.grid[6][5] = config.Tile.BRICK
     world.grid[5][4] = config.Tile.BRICK

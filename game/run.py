@@ -13,4 +13,3 @@ class RunState:
     level_index: int
     player_stats: list[config.PlayerStats]
     upgrade_levels: list[dict[str, int]]
-    shared_lives: int

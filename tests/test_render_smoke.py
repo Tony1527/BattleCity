@@ -200,7 +200,7 @@ def test_all_overlays_render(screen, world):
 
     for draw in (
         lambda: renderer.draw_controls(),
-        lambda: renderer.draw_pause(),
+        lambda: renderer.draw_pause(world),
         lambda: renderer.draw_intro(0, 1.0),
         lambda: renderer.draw_intro(config.BOSS_LEVEL, 0.4),
         lambda: renderer.draw_game_over(world, "gameover.base_destroyed"),
@@ -224,14 +224,11 @@ def test_all_screens_render_in_both_languages(screen, world):
             lambda: renderer.draw_controls(),
             lambda: renderer.draw_world(world),
             lambda: renderer.draw_upgrade(offers, levels, 0),
-            lambda: renderer.draw_pause(),
+            lambda: renderer.draw_pause(world),
             lambda: renderer.draw_intro(0, 1.0),
             lambda: renderer.draw_intro(config.BOSS_LEVEL, 0.4),
             lambda: renderer.draw_game_over(
                 world, "gameover.base_destroyed"
-            ),
-            lambda: renderer.draw_game_over(
-                world, "gameover.both_eliminated"
             ),
             lambda: renderer.draw_victory(world),
         ):
@@ -319,13 +316,11 @@ def test_boss_laser_execute_preserves_up_direction():
     assert world.lasers[-1].direction == config.Direction.UP
 
 
-def test_draw_world_handles_eliminated_players_and_dead_base(screen):
+def test_draw_world_handles_respawning_players_and_dead_base(screen):
     world = World(0, seed=1)
     world.players[0].alive = False
-    world.players[0].eliminated = True
-    world.players[0].respawn_timer = 0.0
+    world.players[0].respawn_timer = 2.0
     world.players[1].alive = False
-    world.players[1].eliminated = False
     world.players[1].respawn_timer = 1.5
     world.base.alive = False
     world.base.hp = 0
@@ -341,10 +336,9 @@ def test_draw_world_handles_eliminated_players_and_dead_base(screen):
     p2_status = pygame.Rect(
         cards[1].right - 115, cards[1].top + 4, 110, 20
     )
-    eliminated_color = (220, 110, 110)
     assert (
         count_color_in_rect(
-            screen, p1_status, eliminated_color, tolerance=2
+            screen, p1_status, config.P1_BLUE, tolerance=2
         )
         > 20
     )
@@ -367,7 +361,7 @@ def test_enemy_counter_uses_boss_label_only_while_alive(screen):
     world = World(config.BOSS_LEVEL, seed=1)
     assert world.boss is not None
     renderer = render.Renderer(screen)
-    counter = renderer._hud_rects()[5]
+    counter = renderer._hud_rects()[4]
     boss_magenta = (224, 96, 224)
 
     renderer.draw_world(world)
@@ -798,3 +792,8 @@ def test_buff_chip_height_tracks_font_metrics(screen):
         20, renderer.font_xs.get_linesize()
     )
     assert renderer._buff_chip_height() >= renderer.font_xs.get_height()
+
+
+def test_hud_has_five_cards_and_no_revive_slot(screen):
+    renderer = render.Renderer(screen)
+    assert len(renderer._hud_rects()) == 5
