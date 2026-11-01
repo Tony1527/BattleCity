@@ -111,6 +111,21 @@ def test_draw_world_handles_boss_and_telegraph(screen):
     renderer.draw_world(world)
 
 
+def test_draw_world_handles_eliminated_players_and_dead_base(screen):
+    world = World(0, seed=1)
+    for player in world.players:
+        player.alive = False
+        player.eliminated = True
+        player.respawn_timer = 0.0
+    world.base.alive = False
+    world.base.hp = 0
+    renderer = render.Renderer(screen)
+
+    renderer.draw_world(world)
+
+    assert changed_pixels(screen, config.BG) > 100
+
+
 def test_wall_cache_updates_when_bricks_are_destroyed(screen):
     world = World(0, seed=1)
     renderer = render.Renderer(screen)
