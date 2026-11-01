@@ -113,6 +113,7 @@ class Player:
         self.fire_timer = 0.0
         self.grenade_timer = 0.0
         self.laser_timer = 0.0
+        self.immobilized = 0.0
         self.damage_residual = 0.0
 
     @property
@@ -138,9 +139,15 @@ class Player:
         self.fire_timer = max(0.0, self.fire_timer - dt)
         self.grenade_timer = max(0.0, self.grenade_timer - dt)
         self.laser_timer = max(0.0, self.laser_timer - dt)
+        self.immobilized = max(0.0, self.immobilized - dt)
 
     def can_shoot(self) -> bool:
-        return self.alive and not self.eliminated and self.fire_timer <= 0
+        return (
+            self.alive
+            and not self.eliminated
+            and self.fire_timer <= 0
+            and self.immobilized <= 0.0
+        )
 
     def shoot_reset(self) -> None:
         self.fire_timer = self.stats.fire_interval
@@ -173,4 +180,5 @@ class Player:
         self.eliminated = False
         self.invuln = config.RESPAWN_INVULN
         self.respawn_timer = 0.0
+        self.immobilized = 0.0
         self.damage_residual = 0.0

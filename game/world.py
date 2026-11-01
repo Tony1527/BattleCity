@@ -12,6 +12,7 @@ from game.effects import Effects
 from game.enemies import Enemy, make_enemy
 from game.entities import Base, Bullet, Player
 from game.geometry import in_bounds, point_to_tile, tile_center, tile_rect
+from game.hazards import Trap
 from game.input import PlayerInput
 from game.levelgen import Level, generate_level
 from game.pathfinding import astar
@@ -57,6 +58,9 @@ class World:
         self.random = random.Random(self.seed)
         self.level: Level = generate_level(self.seed, self.level_index)
         self.grid: list[list[config.Tile]] = self.level.grid
+        self.traps: list[Trap] = [
+            Trap(tile) for tile in self.level.traps
+        ]
 
         self.status = "playing"
         self.elapsed = 0.0
@@ -214,6 +218,8 @@ class World:
     ) -> bool:
         direction = config.Direction(direction)
         entity.direction = direction
+        if getattr(entity, "immobilized", 0.0) > 0.0:
+            return False
         if dt <= 0.0:
             return False
 
@@ -238,6 +244,31 @@ class World:
     ) -> bool:
         return self.move_entity(enemy, direction, dt)
 
+    def _update_traps(self, dt: float) -> None:
+        for trap in self.traps:
+            trap.update(dt)
+
+    def _trigger_trap(
+        self,
+        entity,
+        previous_tile: tuple[int, int],
+    ) -> None:
+        if entity is None or not getattr(entity, "alive", True):
+            return
+        if not hasattr(entity, "immobilized"):
+            return
+
+        current_tile = self.point_to_tile(entity.center)
+        if current_tile == previous_tile:
+            return
+        for trap in self.traps:
+            if trap.tile != current_tile:
+                continue
+            if not trap.try_trigger():
+                return
+            entity.immobilized = config.TRAP_DURATION
+            return
+
     def update(
         self,
         dt: float,
@@ -251,6 +282,7 @@ class World:
         player_inputs = list(inputs) if inputs is not None else []
 
         self.effects.update(dt)
+        self._update_traps(dt)
         self._update_skills(dt)
         self._update_spawning(dt)
         self._update_elite_spawning(dt)
@@ -560,6 +592,7 @@ class World:
             player is None
             or not player.alive
             or player.eliminated
+            or player.immobilized > 0.0
             or player.grenade_timer > 0.0
         ):
             return False
@@ -585,6 +618,7 @@ class World:
             player is None
             or not player.alive
             or player.eliminated
+            or player.immobilized > 0.0
             or player.laser_timer > 0.0
         ):
             return False
@@ -998,8 +1032,14 @@ class World:
             player_input = inputs[player_id]
             if player_input is None:
                 continue
+            if player.immobilized > 0.0:
+                continue
+            previous_tile = self.point_to_tile(player.center)
             if player_input.move is not None:
                 self.move_entity(player, player_input.move, dt)
+            self._trigger_trap(player, previous_tile)
+            if player.immobilized > 0.0:
+                continue
             if player_input.shoot and player.can_shoot():
                 self._player_fire(player)
 
@@ -1022,7 +1062,9 @@ class World:
     def _update_enemies(self, dt: float) -> None:
         for enemy in list(self.enemies):
             if enemy.alive:
+                previous_tile = self.point_to_tile(enemy.center)
                 enemy.update(dt, self)
+                self._trigger_trap(enemy, previous_tile)
         if self.boss is not None and self.boss.alive:
             self.boss.update(dt, self)
 

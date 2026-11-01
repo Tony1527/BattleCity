@@ -119,6 +119,7 @@ class Enemy:
         self.speed = self.spec.speed
         self.fire_timer = 0.0
         self.telegraph = 0.0
+        self.immobilized = 0.0
         self.alive = True
 
     @property
@@ -149,6 +150,9 @@ class Enemy:
             return
 
         self.fire_timer = max(0.0, self.fire_timer - dt)
+        self.immobilized = max(0.0, self.immobilized - dt)
+        if self.immobilized > 0.0:
+            return
         self._behave(dt, world)
 
     def _behave(self, dt: float, world) -> None:

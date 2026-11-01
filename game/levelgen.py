@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -28,6 +29,7 @@ from config import (
     RIVER_ROW_MIN,
     SPAWN_SAFE_RADIUS,
     STEEL_CHANCE,
+    TRAP_COUNTS,
     Direction,
     Tile,
 )
@@ -40,6 +42,10 @@ _MAX_CORRIDOR_BRICKS = 2
 _DFS_ATTEMPTS = 40
 _DFS_DEPTH_LIMIT = 200
 _BRIDGE_CENTER_SLOTS = ((3, 4), (11, 12), (19, 20))
+_TRAP_BASE_MARGIN = 2
+_BOSS_ARENA_TILES = frozenset(
+    (tx, ty) for ty in range(1, 5) for tx in range(6, 18)
+)
 
 
 @dataclass
@@ -48,6 +54,7 @@ class Level:
     spawns: tuple[tuple[int, int], ...]
     base_tiles: tuple[tuple[int, int], ...]
     seed: int
+    traps: tuple[tuple[int, int], ...] = ()
 
 
 def is_passable_for_routes(level: Level, tx: int, ty: int) -> bool:
@@ -361,9 +368,78 @@ def validate_level(level: Level) -> bool:
     return len(directions) >= MIN_BASE_ENTRANCE_DIRECTIONS
 
 
+def _walkable_for_traps(level: Level, tx: int, ty: int) -> bool:
+    if not in_bounds(tx, ty):
+        return False
+    return level.grid[ty][tx] in (Tile.EMPTY, Tile.BRIDGE)
+
+
+def _reachable_tiles(level: Level) -> set[tuple[int, int]]:
+    reachable: set[tuple[int, int]] = set()
+    queue: deque[tuple[int, int]] = deque()
+    for spawn in PLAYER_SPAWNS:
+        if spawn in reachable or not _walkable_for_traps(level, *spawn):
+            continue
+        reachable.add(spawn)
+        queue.append(spawn)
+
+    while queue:
+        tx, ty = queue.popleft()
+        for neighbor in neighbors(tx, ty):
+            if neighbor in reachable:
+                continue
+            if not _walkable_for_traps(level, *neighbor):
+                continue
+            reachable.add(neighbor)
+            queue.append(neighbor)
+    return reachable
+
+
+def _near_base(tile: tuple[int, int]) -> bool:
+    tx, ty = tile
+    return any(
+        abs(tx - bx) <= _TRAP_BASE_MARGIN
+        and abs(ty - by) <= _TRAP_BASE_MARGIN
+        for bx, by in BASE_TILES
+    )
+
+
+def _trap_count(level_index: int) -> int:
+    if 0 <= level_index < len(TRAP_COUNTS):
+        return max(0, int(TRAP_COUNTS[level_index]))
+    return 0
+
+
+def _place_traps(
+    level: Level,
+    level_index: int,
+    rng: random.Random,
+) -> tuple[tuple[int, int], ...]:
+    count = _trap_count(level_index)
+    if count <= 0:
+        return ()
+
+    protected = _protected_cells()
+    reachable = _reachable_tiles(level)
+    candidates = [
+        (tx, ty)
+        for ty, row in enumerate(level.grid)
+        for tx, tile in enumerate(row)
+        if tile == Tile.EMPTY
+        and (tx, ty) in reachable
+        and (tx, ty) not in protected
+        and (tx, ty) not in _BOSS_ARENA_TILES
+        and not _near_base((tx, ty))
+    ]
+
+    rng.shuffle(candidates)
+    return tuple(candidates[:count])
+
+
 def generate_level(seed: int, level_index: int = 0) -> Level:
     river_count = _river_count(level_index)
     seed_rng = random.Random(seed)
+    trap_rng = random.Random(f"{seed}:{level_index}:traps")
     for _ in range(GENERATION_RETRIES):
         attempt_seed = seed_rng.randrange(1 << 31)
         level = Level(
@@ -373,11 +449,12 @@ def generate_level(seed: int, level_index: int = 0) -> Level:
             seed=seed,
         )
         if validate_level(level):
+            level.traps = _place_traps(level, level_index, trap_rng)
             return level
-    return fallback_level(river_count)
+    return fallback_level(river_count, level_index)
 
 
-def fallback_level(river_count: int = 1) -> Level:
+def fallback_level(river_count: int = 1, level_index: int = 0) -> Level:
     grid = _blank_grid()
     _add_steel_border(grid)
 
@@ -417,9 +494,15 @@ def fallback_level(river_count: int = 1) -> Level:
     if river_count > 0:
         _carve_rivers(grid, random.Random(0), river_count)
 
-    return Level(
+    level = Level(
         grid=grid,
         spawns=ENEMY_SPAWNS,
         base_tiles=BASE_TILES,
         seed=0,
     )
+    level.traps = _place_traps(
+        level,
+        level_index,
+        random.Random(f"fallback:{level_index}:traps"),
+    )
+    return level
