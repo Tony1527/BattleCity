@@ -41,10 +41,7 @@ def read_player_inputs(
             PlayerInput(
                 move=_read_move(keys, mapping),
                 shoot=_pressed(keys, mapping["shoot"]),
-                skill=(
-                    player_id in held_skills
-                    and _pressed(keys, mapping["skill"])
-                ),
+                skill=player_id in held_skills,
             )
         )
 

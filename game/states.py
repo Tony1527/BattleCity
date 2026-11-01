@@ -103,18 +103,9 @@ class Game:
         levels = [
             dict(levels) for levels in self.world.upgrade_levels
         ]
-        eliminated = [
-            player.eliminated for player in self.world.players
-        ]
 
         self.level_index = next_index
         self.world = self._make_world(next_index, stats, levels)
-        for player_id, flag in enumerate(eliminated):
-            if flag:
-                player = self.world.players[player_id]
-                player.eliminated = True
-                player.alive = False
-
         self.state = "playing"
         self.intro_timer = INTRO_DURATION
         self.offers = [[], []]

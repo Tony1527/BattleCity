@@ -65,7 +65,7 @@ def test_shoot_keys_are_mapped_per_player():
     assert p2_inputs[0].shoot is False
 
 
-def test_skill_requires_key_press_and_matching_held_player_id():
+def test_skill_uses_matching_held_player_id():
     p1_skill = config.KEYMAP[0]["skill"]
     p2_skill = config.KEYMAP[1]["skill"]
 
@@ -86,11 +86,19 @@ def test_skill_requires_key_press_and_matching_held_player_id():
     )
     assert wrong_owner[0].skill is False
 
-    no_skill_held = game_input.read_player_inputs(
+
+def test_skill_pressed_set_triggers_after_key_release():
+    released = game_input.read_player_inputs(
+        FakeKeys(), skill_pressed={0}
+    )
+    assert released[0].skill is True
+    assert released[1].skill is False
+
+    both_released = game_input.read_player_inputs(
         FakeKeys(), skill_pressed={0, 1}
     )
-    assert no_skill_held[0].skill is False
-    assert no_skill_held[1].skill is False
+    assert both_released[0].skill is True
+    assert both_released[1].skill is True
 
 
 def test_skill_defaults_to_not_pressed_without_held_set():
