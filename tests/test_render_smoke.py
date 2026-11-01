@@ -163,12 +163,41 @@ def test_all_overlays_render(screen, world):
         lambda: renderer.draw_pause(),
         lambda: renderer.draw_intro(0, 1.0),
         lambda: renderer.draw_intro(config.BOSS_LEVEL, 0.4),
-        lambda: renderer.draw_game_over(world, "The base was destroyed."),
+        lambda: renderer.draw_game_over(world, "gameover.base_destroyed"),
         lambda: renderer.draw_victory(world),
     ):
         screen.fill(config.BG)
         draw()
         assert changed_pixels(screen, config.BG, step=8) > 20
+
+
+def test_all_screens_render_in_both_languages(screen, world):
+    renderer = render.Renderer(screen)
+    offers = [list(UPGRADE_POOL[:3]), list(UPGRADE_POOL[3:6])]
+    levels = [{}, {}]
+
+    for language in ("zh", "en"):
+        renderer.set_language(language)
+        for draw in (
+            lambda: renderer.draw_title(0.4, "normal"),
+            lambda: renderer.draw_title(0.4, "hell"),
+            lambda: renderer.draw_controls(),
+            lambda: renderer.draw_world(world),
+            lambda: renderer.draw_upgrade(offers, levels, 0),
+            lambda: renderer.draw_pause(),
+            lambda: renderer.draw_intro(0, 1.0),
+            lambda: renderer.draw_intro(config.BOSS_LEVEL, 0.4),
+            lambda: renderer.draw_game_over(
+                world, "gameover.base_destroyed"
+            ),
+            lambda: renderer.draw_game_over(
+                world, "gameover.both_eliminated"
+            ),
+            lambda: renderer.draw_victory(world),
+        ):
+            screen.fill(config.BG)
+            draw()
+            assert changed_pixels(screen, config.BG, step=8) > 20
 
 
 def test_draw_intro_fades_text_with_remaining(screen):

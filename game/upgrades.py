@@ -9,8 +9,8 @@ from config import PlayerStats
 @dataclass(frozen=True)
 class Upgrade:
     id: str
-    name: str
-    description: str
+    name_key: str
+    desc_key: str
     stat: str
     op: str
     amount: float
@@ -21,8 +21,8 @@ class Upgrade:
 UPGRADE_POOL: tuple[Upgrade, ...] = (
     Upgrade(
         "overclock",
-        "Overclock",
-        "Fire normal rounds 15% faster.",
+        "upgrade.overclock.name",
+        "upgrade.overclock.desc",
         "fire_interval",
         "mul",
         0.85,
@@ -30,8 +30,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "heavy_rounds",
-        "Heavy Rounds",
-        "Normal rounds deal +1 damage.",
+        "upgrade.heavy_rounds.name",
+        "upgrade.heavy_rounds.desc",
         "bullet_damage",
         "add",
         1,
@@ -39,8 +39,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "servos",
-        "Servos",
-        "Move 12% faster.",
+        "upgrade.servos.name",
+        "upgrade.servos.desc",
         "speed",
         "mul",
         1.12,
@@ -48,8 +48,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "plated_hull",
-        "Plated Hull",
-        "Gain +1 maximum HP.",
+        "upgrade.plated_hull.name",
+        "upgrade.plated_hull.desc",
         "max_hp",
         "add",
         1,
@@ -57,8 +57,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "reactive_armor",
-        "Reactive Armor",
-        "Reduce incoming damage by 5%.",
+        "upgrade.reactive_armor.name",
+        "upgrade.reactive_armor.desc",
         "damage_reduction",
         "add",
         0.05,
@@ -66,8 +66,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "rapid_loader",
-        "Rapid Loader",
-        "Normal rounds travel 15% faster.",
+        "upgrade.rapid_loader.name",
+        "upgrade.rapid_loader.desc",
         "bullet_speed",
         "mul",
         1.15,
@@ -75,8 +75,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "grenade_tuning",
-        "Grenade Tuning",
-        "Grenade cooldown reduced by 15%.",
+        "upgrade.grenade_tuning.name",
+        "upgrade.grenade_tuning.desc",
         "grenade_cooldown",
         "mul",
         0.85,
@@ -85,8 +85,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "demo_charge",
-        "Demo Charge",
-        "Grenades deal +10 damage.",
+        "upgrade.demo_charge.name",
+        "upgrade.demo_charge.desc",
         "grenade_damage",
         "add",
         10,
@@ -95,8 +95,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "wide_blast",
-        "Wide Blast",
-        "Grenade radius increased by 15%.",
+        "upgrade.wide_blast.name",
+        "upgrade.wide_blast.desc",
         "grenade_radius",
         "mul",
         1.15,
@@ -105,8 +105,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "split_charge",
-        "Split Charge",
-        "Grenades split into an extra explosion.",
+        "upgrade.split_charge.name",
+        "upgrade.split_charge.desc",
         "grenade_split",
         "add",
         1,
@@ -115,8 +115,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "laser_focus",
-        "Laser Focus",
-        "Laser deals +15 damage.",
+        "upgrade.laser_focus.name",
+        "upgrade.laser_focus.desc",
         "laser_damage",
         "add",
         15,
@@ -125,8 +125,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "laser_capacitor",
-        "Laser Capacitor",
-        "Laser cooldown reduced by 15%.",
+        "upgrade.laser_capacitor.name",
+        "upgrade.laser_capacitor.desc",
         "laser_cooldown",
         "mul",
         0.85,
@@ -135,8 +135,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "laser_extender",
-        "Laser Extender",
-        "Laser range increased by 15%.",
+        "upgrade.laser_extender.name",
+        "upgrade.laser_extender.desc",
         "laser_range",
         "mul",
         1.15,
@@ -145,8 +145,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "base_shield",
-        "Base Shield",
-        "Base absorbs +1 damage each level.",
+        "upgrade.base_shield.name",
+        "upgrade.base_shield.desc",
         "base_shield",
         "add",
         1,
@@ -154,8 +154,8 @@ UPGRADE_POOL: tuple[Upgrade, ...] = (
     ),
     Upgrade(
         "spare_parts",
-        "Spare Parts",
-        "Gain +1 shared revive.",
+        "upgrade.spare_parts.name",
+        "upgrade.spare_parts.desc",
         "extra_lives",
         "add",
         1,

@@ -5,6 +5,7 @@ import math
 import pygame
 
 import config
+from game import i18n
 from game.upgrades import Upgrade
 
 _HUD_INNER_Y = 10
@@ -46,6 +47,7 @@ class Renderer:
         self.font_m = pygame.font.Font(None, 30)
         self.font_l = pygame.font.Font(None, 48)
         self.font_xl = pygame.font.Font(None, 84)
+        self.language = "en"
 
         self.hud_rect = pygame.Rect(
             0, self.height - config.HUD_HEIGHT, self.width, config.HUD_HEIGHT
@@ -63,6 +65,14 @@ class Renderer:
         self._wall_signature: tuple | None = None
         self._wall_surface: pygame.Surface | None = None
         self._wall_glow: pygame.Surface | None = None
+
+    def set_language(self, language: str) -> None:
+        self.language = (
+            language if language in i18n.LANGUAGES else i18n.DEFAULT_LANGUAGE
+        )
+
+    def tr(self, key: str, **kwargs) -> str:
+        return i18n.tr(self.language, key, **kwargs)
 
     # ------------------------------------------------------------------
     # Low level helpers
@@ -228,16 +238,30 @@ class Renderer:
         self, text: str, font: pygame.font.Font, max_width: int
     ) -> list[str]:
         lines: list[str] = []
-        current = ""
-        for word in str(text).split():
-            candidate = f"{current} {word}".strip()
-            if not current or font.size(candidate)[0] <= max_width:
-                current = candidate
-            else:
+        for paragraph in str(text).split("\n"):
+            current = ""
+            for word in paragraph.split():
+                candidate = f"{current} {word}".strip()
+                if font.size(candidate)[0] <= max_width:
+                    current = candidate
+                    continue
+                if current:
+                    lines.append(current)
+                    current = ""
+                if font.size(word)[0] <= max_width:
+                    current = word
+                    continue
+                chunk = ""
+                for character in word:
+                    if font.size(chunk + character)[0] <= max_width:
+                        chunk += character
+                    else:
+                        if chunk:
+                            lines.append(chunk)
+                        chunk = character
+                current = chunk
+            if current:
                 lines.append(current)
-                current = word
-        if current:
-            lines.append(current)
         return lines
 
     def _panel(
@@ -677,7 +701,7 @@ class Renderer:
                 (72, 220, 240), center, radius + 4, strength=0.5
             )
             self._text(
-                f"SHIELD {base.shield}",
+                self.tr("hud.shield", value=base.shield),
                 self.font_xs,
                 (136, 240, 248),
                 (center[0], rect.top - 28),
@@ -749,7 +773,11 @@ class Renderer:
                     self.screen, _scale(color, 0.65), center, 16, 1
                 )
                 self._text(
-                    f"P{player.player_id + 1} {player.respawn_timer:.1f}",
+                    self.tr(
+                        "hud.player_respawn",
+                        number=player.player_id + 1,
+                        seconds=player.respawn_timer,
+                    ),
                     self.font_xs,
                     color,
                     (center[0], center[1] - 26),
@@ -954,7 +982,7 @@ class Renderer:
             phase_color,
         )
         self._text(
-            f"PHASE {boss.phase}",
+            self.tr("hud.phase", phase=boss.phase),
             self.font_xs,
             (214, 232, 246),
             (cx, cy + size // 2 + 12),
@@ -1224,25 +1252,29 @@ class Renderer:
             rect, fill=_HUD_PANEL, border=_scale(color, 0.45), accent=color
         )
         self._text(
-            f"P{player.player_id + 1}",
+            self.tr("hud.player", number=player.player_id + 1),
             self.font_m,
             color,
             (rect.left + 10, rect.top + 3),
         )
         self._text(
-            f"HP {player.hp}/{player.max_hp}",
+            self.tr(
+                "hud.hp", current=player.hp, maximum=player.max_hp
+            ),
             self.font_xs,
             _HUD_TEXT,
             (rect.left + 48, rect.top + 9),
         )
 
         if player.eliminated:
-            status, status_color = "ELIMINATED", (220, 110, 110)
+            status, status_color = self.tr("hud.eliminated"), (220, 110, 110)
         elif not player.alive:
-            status = f"RESPAWN {player.respawn_timer:.1f}"
+            status = self.tr(
+                "hud.respawn", seconds=player.respawn_timer
+            )
             status_color = color
         else:
-            status, status_color = "ONLINE", (150, 216, 190)
+            status, status_color = self.tr("hud.online"), (150, 216, 190)
         self._text(
             status,
             self.font_xs,
@@ -1272,7 +1304,7 @@ class Renderer:
             self._draw_cooldown(
                 rect,
                 rect.top + 48,
-                "GRN",
+                self.tr("hud.grenade"),
                 player.grenade_timer,
                 player.stats.grenade_cooldown,
                 color,
@@ -1282,7 +1314,7 @@ class Renderer:
             self._draw_cooldown(
                 rect,
                 rect.top + 48,
-                "LSR",
+                self.tr("hud.laser"),
                 player.laser_timer,
                 player.stats.laser_cooldown,
                 color,
@@ -1326,7 +1358,7 @@ class Renderer:
     def _draw_revives(self, world, rect: pygame.Rect) -> None:
         self._panel(rect, fill=_HUD_PANEL, border=_HUD_BORDER)
         self._text(
-            "REVIVE",
+            self.tr("hud.revive"),
             self.font_xs,
             _HUD_MUTED,
             (rect.centerx, rect.top + 9),
@@ -1349,7 +1381,7 @@ class Renderer:
                 )
         if count > shown:
             self._text(
-                f"+{count - shown}",
+                self.tr("hud.revive_extra", count=count - shown),
                 self.font_xs,
                 _REVIVE_DIAMOND,
                 (rect.centerx, rect.top + 53),
@@ -1357,7 +1389,7 @@ class Renderer:
             )
         else:
             self._text(
-                f"x{count}",
+                self.tr("hud.revive_count", count=count),
                 self.font_xs,
                 _HUD_MUTED,
                 (rect.centerx, rect.top + 54),
@@ -1368,10 +1400,15 @@ class Renderer:
         base = world.base
         self._panel(rect, fill=_HUD_PANEL, border=_HUD_BORDER)
         self._text(
-            "BASE", self.font_xs, _HUD_MUTED, (rect.left + 8, rect.top + 8)
+            self.tr("hud.base"),
+            self.font_xs,
+            _HUD_MUTED,
+            (rect.left + 8, rect.top + 8),
         )
         shield_text = (
-            f"SHIELD {base.shield}" if base.shield > 0 else "SHIELD -"
+            self.tr("hud.shield", value=base.shield)
+            if base.shield > 0
+            else self.tr("hud.shield_none")
         )
         self._text(
             shield_text,
@@ -1405,7 +1442,11 @@ class Renderer:
                 hp_color if index < base.hp else (52, 64, 78)
             )
             self._diamond(center, 5, pip_color)
-        state = "ONLINE" if base.alive else "DESTROYED"
+        state = (
+            self.tr("hud.online")
+            if base.alive
+            else self.tr("hud.destroyed")
+        )
         self._text(
             state,
             self.font_xs,
@@ -1418,7 +1459,10 @@ class Renderer:
         self._panel(rect, fill=_HUD_PANEL, border=_HUD_BORDER)
         current = int(world.level_index)
         self._text(
-            "LEVEL", self.font_xs, _HUD_MUTED, (rect.left + 8, rect.top + 8)
+            self.tr("hud.level"),
+            self.font_xs,
+            _HUD_MUTED,
+            (rect.left + 8, rect.top + 8),
         )
         self._text(
             f"{current + 1}/{config.LEVEL_COUNT}",
@@ -1465,7 +1509,11 @@ class Renderer:
                 pygame.draw.circle(
                     self.screen, _ELITE_MAGENTA, (x, y), 9, 1
                 )
-        status = "BOSS" if current == config.BOSS_LEVEL else "FIELD"
+        status = (
+            self.tr("hud.boss")
+            if current == config.BOSS_LEVEL
+            else self.tr("hud.field")
+        )
         self._text(
             status,
             self.font_xs,
@@ -1477,7 +1525,9 @@ class Renderer:
     def _draw_enemy_counter(self, world, rect: pygame.Rect) -> None:
         self._panel(rect, fill=_HUD_PANEL, border=_HUD_BORDER)
         boss_level = world.boss is not None and world.boss.alive
-        label = "BOSS" if boss_level else "ENEMY"
+        label = (
+            self.tr("hud.boss") if boss_level else self.tr("hud.enemy")
+        )
         self._text(
             label,
             self.font_xs,
@@ -1551,7 +1601,7 @@ class Renderer:
             align="center",
         )
         self._text(
-            "HOLOGRAPHIC ARMORY",
+            self.tr("title.subtitle"),
             self.font_m,
             config.P2_AMBER,
             (cx, cy + 58),
@@ -1577,37 +1627,54 @@ class Renderer:
             else _scale(config.HOLO_WHITE, 0.45)
         )
         self._text(
-            "PRESS ENTER TO START",
+            self.tr("title.start"),
             self.font_m,
             prompt_color,
             (cx, cy + 156),
             align="center",
         )
         self._text(
-            "2 PLAYER CO-OP  /  PROCEDURAL ARMORY",
+            self.tr("title.tagline"),
             self.font_s,
             (126, 164, 192),
             (cx, cy + 204),
             align="center",
         )
-        difficulty_label = str(difficulty).upper()
+        difficulty_name = self.tr(f"difficulty.{str(difficulty).lower()}")
         difficulty_color = (
             config.ENEMY_RED
             if str(difficulty).lower() == "hell"
             else config.P1_BLUE
         )
         self._text(
-            f"DIFFICULTY  < {difficulty_label} >",
+            self.tr("title.difficulty", name=difficulty_name),
             self.font_m,
             difficulty_color,
-            (cx, cy + 252),
+            (cx, cy + 244),
             align="center",
         )
         self._text(
-            "LEFT / RIGHT TO CHANGE",
+            self.tr("title.difficulty_hint"),
             self.font_s,
             (126, 164, 192),
-            (cx, cy + 292),
+            (cx, cy + 280),
+            align="center",
+        )
+        self._text(
+            self.tr(
+                "title.language",
+                name=self.tr(f"language.{self.language}"),
+            ),
+            self.font_m,
+            config.P2_AMBER,
+            (cx, cy + 316),
+            align="center",
+        )
+        self._text(
+            self.tr("title.language_hint"),
+            self.font_s,
+            (126, 164, 192),
+            (cx, cy + 352),
             align="center",
         )
 
@@ -1623,14 +1690,14 @@ class Renderer:
             accent=config.P1_BLUE,
         )
         self._text(
-            "CONTROLS",
+            self.tr("controls.title"),
             self.font_xl,
             (232, 248, 255),
             (cx, 178),
             align="center",
         )
         self._text(
-            "FIELD MANUAL",
+            self.tr("controls.subtitle"),
             self.font_s,
             config.P2_AMBER,
             (cx, 224),
@@ -1639,19 +1706,19 @@ class Renderer:
 
         rows = (
             (
-                "P1",
+                self.tr("controls.p1"),
                 config.P1_BLUE,
-                "W A S D  MOVE      SPACE  FIRE      F  GRENADE",
+                self.tr("controls.p1_actions"),
             ),
             (
-                "P2",
+                self.tr("controls.p2"),
                 config.P2_AMBER,
-                "ARROWS  MOVE      .  FIRE      /  LASER",
+                self.tr("controls.p2_actions"),
             ),
             (
-                "SYS",
+                self.tr("controls.system"),
                 (150, 190, 214),
-                "ESC  PAUSE      ENTER  CONFIRM",
+                self.tr("controls.system_actions"),
             ),
         )
         y = 292
@@ -1668,14 +1735,24 @@ class Renderer:
             y += 74
 
         self._text(
-            "SKILLS HIT HARDER THAN ROUNDS. THE BASE IS THE LINE.",
+            self.tr(
+                "controls.language",
+                name=self.tr(f"language.{self.language}"),
+            ),
+            self.font_s,
+            config.P2_AMBER,
+            (cx, card.bottom - 112),
+            align="center",
+        )
+        self._text(
+            self.tr("controls.tip"),
             self.font_s,
             (126, 164, 192),
             (cx, card.bottom - 74),
             align="center",
         )
         self._text(
-            "PRESS ENTER TO CONTINUE",
+            self.tr("controls.continue"),
             self.font_m,
             config.HOLO_WHITE,
             (cx, card.bottom - 34),
@@ -1694,14 +1771,14 @@ class Renderer:
             config.P1_BLUE if choosing == 0 else config.P2_AMBER
         )
         self._text(
-            f"PLAYER {choosing + 1} CHOOSES AN UPGRADE",
+            self.tr("upgrade.choose_title", number=choosing + 1),
             self.font_l,
             color,
             (cx, 88),
             align="center",
         )
         self._text(
-            "THE OTHER PLAYER CAN WATCH",
+            self.tr("upgrade.choose_watch"),
             self.font_s,
             (140, 172, 196),
             (cx, 126),
@@ -1746,13 +1823,13 @@ class Renderer:
                 align="center",
             )
             self._text(
-                upgrade.name,
+                self.tr(upgrade.name_key),
                 self.font_m,
                 (236, 248, 255),
                 (card.left + 18, card.top + 76),
             )
             lines = self._wrap_text(
-                upgrade.description, self.font_s, card_width - 36
+                self.tr(upgrade.desc_key), self.font_s, card_width - 36
             )
             for line_index, line in enumerate(lines[:4]):
                 self._text(
@@ -1764,7 +1841,11 @@ class Renderer:
 
             stacks = current_levels.get(upgrade.id, 0)
             self._text(
-                f"STACK {stacks}/{upgrade.max_stacks}",
+                self.tr(
+                    "upgrade.stack",
+                    current=stacks,
+                    maximum=upgrade.max_stacks,
+                ),
                 self.font_xs,
                 color,
                 (card.left + 18, card.bottom - 78),
@@ -1783,7 +1864,7 @@ class Renderer:
                     self.screen, pip_color, pip, border_radius=3
                 )
             self._text(
-                f"PRESS {index + 1}",
+                self.tr("upgrade.press", number=index + 1),
                 self.font_s,
                 (206, 226, 240),
                 (card.centerx, card.bottom - 24),
@@ -1792,7 +1873,7 @@ class Renderer:
 
         if not current_offers:
             self._text(
-                "NO UPGRADES AVAILABLE",
+                self.tr("upgrade.none"),
                 self.font_m,
                 (200, 150, 150),
                 (cx, top + height // 2),
@@ -1815,24 +1896,34 @@ class Renderer:
         )
         self._end_glow()
         self._text(
-            "PAUSED",
+            self.tr("pause.title"),
             self.font_xl,
             (232, 248, 255),
             (cx, card.top + 70),
             align="center",
         )
         self._text(
-            "ESC TO RESUME",
+            self.tr("pause.resume"),
             self.font_m,
             config.P1_BLUE,
-            (cx, card.top + 132),
+            (cx, card.top + 128),
             align="center",
         )
         self._text(
-            "THE ARMORY HOLDS ITS BREATH",
+            self.tr(
+                "pause.language",
+                name=self.tr(f"language.{self.language}"),
+            ),
+            self.font_s,
+            config.P2_AMBER,
+            (cx, card.top + 158),
+            align="center",
+        )
+        self._text(
+            self.tr("pause.subtitle"),
             self.font_s,
             (126, 164, 192),
-            (cx, card.top + 176),
+            (cx, card.top + 190),
             align="center",
         )
 
@@ -1846,15 +1937,18 @@ class Renderer:
         )
         self._end_glow()
         self._text(
-            "GAME OVER",
+            self.tr("gameover.title"),
             self.font_xl,
             (255, 122, 112),
             (cx, cy),
             align="center",
         )
         if reason:
+            reason_text = (
+                self.tr(reason) if reason in i18n.all_keys() else reason
+            )
             self._text(
-                reason,
+                reason_text,
                 self.font_m,
                 (220, 186, 186),
                 (cx, cy + 82),
@@ -1867,24 +1961,35 @@ class Renderer:
             else 0
         )
         self._text(
-            f"REACHED LEVEL {level} / {config.LEVEL_COUNT}",
+            self.tr(
+                "gameover.reached",
+                level=level,
+                total=config.LEVEL_COUNT,
+            ),
             self.font_s,
             (150, 180, 202),
             (cx, cy + 132),
             align="center",
         )
         self._text(
-            f"ENEMIES REMAINING {remaining}",
+            self.tr("gameover.remaining", remaining=remaining),
             self.font_s,
             (150, 180, 202),
             (cx, cy + 160),
             align="center",
         )
         self._text(
-            "PRESS ENTER TO RESTART",
+            self.tr("gameover.retry"),
             self.font_m,
             config.HOLO_WHITE,
-            (cx, cy + 232),
+            (cx, cy + 220),
+            align="center",
+        )
+        self._text(
+            self.tr("gameover.quit"),
+            self.font_s,
+            (150, 180, 202),
+            (cx, cy + 254),
             align="center",
         )
 
@@ -1909,14 +2014,14 @@ class Renderer:
                 1,
             )
         self._text(
-            "VICTORY",
+            self.tr("victory.title"),
             self.font_xl,
             (238, 250, 255),
             (cx, cy),
             align="center",
         )
         self._text(
-            "ALL EIGHT LEVELS CLEARED",
+            self.tr("victory.subtitle"),
             self.font_m,
             config.P2_AMBER,
             (cx, cy + 78),
@@ -1924,21 +2029,21 @@ class Renderer:
         )
         shared = getattr(world, "shared_lives", 0)
         self._text(
-            f"SHARED REVIVES LEFT {shared}",
+            self.tr("victory.revives", count=shared),
             self.font_s,
             (150, 200, 226),
             (cx, cy + 126),
             align="center",
         )
         self._text(
-            "THE HOLOGRAPHIC ARMORY IS SILENT",
+            self.tr("victory.epilogue"),
             self.font_s,
             (126, 164, 192),
             (cx, cy + 158),
             align="center",
         )
         self._text(
-            "PRESS ENTER TO PLAY AGAIN",
+            self.tr("victory.again"),
             self.font_m,
             config.HOLO_WHITE,
             (cx, cy + 226),
@@ -1952,7 +2057,11 @@ class Renderer:
         cx = self.width // 2
         is_boss = level_index == config.BOSS_LEVEL
         color = _ELITE_MAGENTA if is_boss else config.HOLO_WHITE
-        title = "BOSS LEVEL" if is_boss else f"LEVEL {level_index + 1}"
+        title = (
+            self.tr("intro.boss")
+            if is_boss
+            else self.tr("intro.level", level=level_index + 1)
+        )
         self._text(
             title,
             self.font_xl,
@@ -1962,7 +2071,9 @@ class Renderer:
             alpha=alpha,
         )
         self._text(
-            "SURVIVE THE ARMORY" if is_boss else "GET READY",
+            self.tr("intro.boss_subtitle")
+            if is_boss
+            else self.tr("intro.ready"),
             self.font_m,
             config.P2_AMBER if is_boss else config.P1_BLUE,
             (cx, 348),

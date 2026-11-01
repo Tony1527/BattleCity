@@ -203,7 +203,7 @@ def test_loss_enters_gameover_and_enter_retries_current_level(game):
     game.update(1 / 60)
 
     assert game.state == "gameover"
-    assert game.reason == "both_eliminated"
+    assert game.reason == "gameover.both_eliminated"
 
     game.handle_event(key_event(config.CONFIRM_KEY))
 

@@ -5,6 +5,7 @@ import random
 import pygame
 
 import config
+from game import i18n
 from game.audio import Audio
 from game.difficulty import PROFILES
 from game.input import choice_from_event, read_player_inputs
@@ -29,7 +30,9 @@ class Game:
         self.screen = screen
         self.seed = seed
         self.difficulty = difficulty
-        self.language = language
+        self.language = (
+            language if language in i18n.LANGUAGES else i18n.DEFAULT_LANGUAGE
+        )
         self._run_seed = (
             int(seed) if seed is not None else random.randrange(1 << 31)
         )
@@ -37,6 +40,7 @@ class Game:
             (config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
         )
         self.renderer = Renderer(self.canvas)
+        self.renderer.set_language(self.language)
         self.audio = audio if audio is not None else Audio()
         self.state = "title"
         self.running = True
@@ -211,8 +215,14 @@ class Game:
 
     def _loss_reason(self) -> str:
         if not self.world.base.alive:
-            return "base_destroyed"
-        return "both_eliminated"
+            return "gameover.base_destroyed"
+        return "gameover.both_eliminated"
+
+    def _toggle_language(self) -> None:
+        keys = list(i18n.LANGUAGES)
+        index = keys.index(self.language) if self.language in keys else 0
+        self.language = keys[(index + 1) % len(keys)]
+        self.renderer.set_language(self.language)
 
     def _change_difficulty(self, step: int) -> None:
         keys = list(PROFILES)
@@ -270,6 +280,13 @@ class Game:
             return
 
         key = event.key
+        if key == pygame.K_l and self.state in (
+            "title",
+            "controls",
+            "paused",
+        ):
+            self._toggle_language()
+            return
         if key == config.PAUSE_KEY:
             if self.state == "playing":
                 self.state = "paused"

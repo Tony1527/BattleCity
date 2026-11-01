@@ -35,8 +35,8 @@ def test_upgrade_dataclass_is_frozen_and_well_formed():
     assert isinstance(upgrade, upgrades.Upgrade)
     assert [field.name for field in fields(upgrade)] == [
         "id",
-        "name",
-        "description",
+        "name_key",
+        "desc_key",
         "stat",
         "op",
         "amount",

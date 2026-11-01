@@ -40,7 +40,7 @@ def test_player_elimination_retry_preserves_upgrades_lives_and_base(game):
     game.world.players[1].eliminated = True
     game.update(1 / 60)
     assert game.state == "gameover"
-    assert game.reason == "both_eliminated"
+    assert game.reason == "gameover.both_eliminated"
 
     game.handle_event(key_event(config.CONFIRM_KEY))
 
@@ -59,7 +59,7 @@ def test_base_destroyed_retry_restores_full_base(game):
     game.world.base.alive = False
     game.update(1 / 60)
     assert game.state == "gameover"
-    assert game.reason == "base_destroyed"
+    assert game.reason == "gameover.base_destroyed"
     game.handle_event(key_event(config.CONFIRM_KEY))
 
     assert game.world.base.alive is True
