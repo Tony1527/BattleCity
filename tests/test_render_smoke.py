@@ -111,6 +111,33 @@ def test_draw_world_handles_boss_and_telegraph(screen):
     renderer.draw_world(world)
 
 
+def test_wall_cache_updates_when_bricks_are_destroyed(screen):
+    world = World(0, seed=1)
+    renderer = render.Renderer(screen)
+    brick = None
+    for ty, row in enumerate(world.grid):
+        for tx, tile in enumerate(row):
+            if tile == config.Tile.BRICK:
+                brick = (tx, ty)
+                break
+        if brick is not None:
+            break
+    assert brick is not None
+
+    renderer.draw_world(world)
+    probe = (
+        config.PLAYFIELD_X + brick[0] * config.TILE + config.TILE // 2,
+        config.PLAYFIELD_Y + brick[1] * config.TILE + config.TILE // 2,
+    )
+    before = tuple(screen.get_at(probe))[:3]
+
+    world.destroy_brick(*brick)
+    renderer.draw_world(world)
+    after = tuple(screen.get_at(probe))[:3]
+
+    assert after != before
+
+
 def test_draw_world_handles_skills_and_enemies(screen, world):
     player = world.players[0]
     world.throw_grenade(player)

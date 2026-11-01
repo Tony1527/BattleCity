@@ -5,7 +5,6 @@ import math
 import pygame
 
 import config
-from game.geometry import tile_rect
 from game.upgrades import Upgrade
 
 _HUD_INNER_Y = 10
@@ -58,6 +57,12 @@ class Renderer:
         self._tank_cache: dict[tuple, pygame.Surface] = {}
         self._background = pygame.Surface((self.width, self.height))
         self._build_background()
+        self._brick_image = self._build_brick_image()
+        self._steel_image = self._build_steel_image()
+        self._steel_glow_image = self._build_steel_glow_image()
+        self._wall_signature: tuple | None = None
+        self._wall_surface: pygame.Surface | None = None
+        self._wall_glow: pygame.Surface | None = None
 
     # ------------------------------------------------------------------
     # Low level helpers
@@ -127,7 +132,9 @@ class Renderer:
         self._glow.fill((0, 0, 0))
 
     def _end_glow(self) -> None:
-        self.screen.blit(self._glow, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+        self.screen.blit(
+            self._glow, (0, 0), special_flags=pygame.BLEND_RGB_ADD
+        )
 
     def _glow_circle(
         self,
@@ -355,64 +362,67 @@ class Renderer:
     # ------------------------------------------------------------------
     # Field elements
     # ------------------------------------------------------------------
-    def _draw_brick(self, rect: pygame.Rect) -> None:
-        pygame.draw.rect(self.screen, (88, 46, 38), rect)
+    def _build_brick_image(self) -> pygame.Surface:
+        image = pygame.Surface((config.TILE, config.TILE))
+        rect = image.get_rect()
+        image.fill((88, 46, 38))
         for row in range(4):
-            y = rect.top + row * 12
+            y = row * 12
             shift = 12 if row % 2 else 0
             for column in range(-1, 3):
-                bx = rect.left + column * 24 + shift
+                bx = column * 24 + shift
                 brick = pygame.Rect(bx + 1, y + 1, 22, 10).clip(rect)
                 if brick.width <= 1 or brick.height <= 1:
                     continue
                 shade = 1.0 if (row + column) % 2 == 0 else 0.84
                 pygame.draw.rect(
-                    self.screen, _scale(config.BRICK, shade), brick
+                    image, _scale(config.BRICK, shade), brick
                 )
                 pygame.draw.line(
-                    self.screen,
+                    image,
                     _scale(config.BRICK, 1.25),
                     (brick.left, brick.top),
                     (brick.right - 1, brick.top),
                 )
-        pygame.draw.rect(self.screen, (54, 30, 26), rect, 1)
+        pygame.draw.rect(image, (54, 30, 26), rect, 1)
+        return image
 
-    def _draw_steel(self, rect: pygame.Rect) -> None:
-        pygame.draw.rect(self.screen, _STEEL_DARK, rect)
+    def _build_steel_image(self) -> pygame.Surface:
+        image = pygame.Surface((config.TILE, config.TILE))
+        rect = image.get_rect()
+        image.fill(_STEEL_DARK)
         inner = rect.inflate(-6, -6)
-        pygame.draw.rect(
-            self.screen, config.STEEL, inner, border_radius=3
-        )
+        pygame.draw.rect(image, config.STEEL, inner, border_radius=3)
         pygame.draw.line(
-            self.screen,
+            image,
             _STEEL_HIGHLIGHT,
             (inner.left + 2, inner.top + 2),
             (inner.right - 2, inner.top + 2),
             2,
         )
         pygame.draw.line(
-            self.screen,
+            image,
             _STEEL_HIGHLIGHT,
             (inner.left + 2, inner.top + 2),
             (inner.left + 2, inner.bottom - 2),
             2,
         )
         pygame.draw.line(
-            self.screen,
+            image,
             _STEEL_SHADOW,
             (inner.left + 2, inner.bottom - 2),
             (inner.right - 2, inner.bottom - 2),
             2,
         )
         pygame.draw.line(
-            self.screen,
+            image,
             _STEEL_SHADOW,
             (inner.right - 2, inner.top + 2),
             (inner.right - 2, inner.bottom - 2),
             2,
         )
         pygame.draw.rect(
-            self.screen, _HOLO_EDGE, inner, width=1, border_radius=3
+            image, _HOLO_EDGE, inner, width=1, border_radius=3
         )
         for corner in (
             (inner.left + 5, inner.top + 5),
@@ -420,20 +430,69 @@ class Renderer:
             (inner.left + 5, inner.bottom - 5),
             (inner.right - 5, inner.bottom - 5),
         ):
-            pygame.draw.circle(self.screen, (230, 245, 255), corner, 1)
-        self._glow_rect((84, 146, 186), rect, 0.2)
+            pygame.draw.circle(image, (230, 245, 255), corner, 1)
+        return image
 
-    def _draw_tiles(self, world, offset: tuple[int, int]) -> None:
-        ox, oy = offset
+    def _build_steel_glow_image(self) -> pygame.Surface:
+        image = pygame.Surface((config.TILE, config.TILE))
+        image.fill((0, 0, 0))
+        for index, factor in enumerate((0.18, 0.32, 0.5)):
+            inset = index * 3
+            glow_rect = pygame.Rect(
+                inset,
+                inset,
+                config.TILE - inset * 2,
+                config.TILE - inset * 2,
+            )
+            pygame.draw.rect(
+                image,
+                _scale((84, 146, 186), 0.2 * factor),
+                glow_rect,
+                width=3,
+                border_radius=4,
+            )
+        return image
+
+    def _ensure_wall_layer(self, world) -> None:
+        signature = tuple(tuple(row) for row in world.grid)
+        if signature == self._wall_signature:
+            return
+        self._wall_signature = signature
+        self._wall_surface = pygame.Surface(
+            (config.PLAYFIELD_WIDTH, config.PLAYFIELD_HEIGHT),
+            pygame.SRCALPHA,
+        )
+        self._wall_glow = pygame.Surface(
+            (config.PLAYFIELD_WIDTH, config.PLAYFIELD_HEIGHT)
+        )
+        self._wall_glow.fill((0, 0, 0))
         for ty, row in enumerate(world.grid):
             for tx, tile in enumerate(row):
                 if tile == config.Tile.EMPTY:
                     continue
-                rect = tile_rect(tx, ty).move(ox, oy)
+                position = (tx * config.TILE, ty * config.TILE)
                 if tile == config.Tile.BRICK:
-                    self._draw_brick(rect)
+                    self._wall_surface.blit(self._brick_image, position)
                 else:
-                    self._draw_steel(rect)
+                    self._wall_surface.blit(self._steel_image, position)
+                    self._wall_glow.blit(
+                        self._steel_glow_image,
+                        position,
+                        special_flags=pygame.BLEND_RGB_ADD,
+                    )
+
+    def _draw_tiles(self, world, offset: tuple[int, int]) -> None:
+        self._ensure_wall_layer(world)
+        position = (
+            config.PLAYFIELD_X + offset[0],
+            config.PLAYFIELD_Y + offset[1],
+        )
+        self._glow.blit(
+            self._wall_glow,
+            position,
+            special_flags=pygame.BLEND_RGB_ADD,
+        )
+        self.screen.blit(self._wall_surface, position)
 
     def _tank_surface(
         self,
@@ -1275,7 +1334,9 @@ class Renderer:
         self._text(
             "BASE", self.font_xs, _HUD_MUTED, (rect.left + 8, rect.top + 8)
         )
-        shield_text = f"SHIELD {base.shield}" if base.shield > 0 else "SHIELD -"
+        shield_text = (
+            f"SHIELD {base.shield}" if base.shield > 0 else "SHIELD -"
+        )
         self._text(
             shield_text,
             self.font_xs,
@@ -1845,8 +1906,9 @@ class Renderer:
             (cx, 348),
             align="center",
         )
+        shown_level = max(1, min(config.LEVEL_COUNT, level_index + 1))
         self._text(
-            f"{max(0, min(level_index, config.LEVEL_COUNT - 1)) + 1} / {config.LEVEL_COUNT}",
+            f"{shown_level} / {config.LEVEL_COUNT}",
             self.font_s,
             (150, 180, 202),
             (cx, 382),
