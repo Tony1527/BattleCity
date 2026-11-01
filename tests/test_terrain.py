@@ -1,6 +1,8 @@
+import pygame
 import pytest
 
 import config
+from game import render
 from game.entities import Bullet
 from game.levelgen import validate_level
 from game.skills import compute_laser
@@ -59,3 +61,64 @@ def test_laser_passes_over_bridge_and_river():
         origin, config.Direction.RIGHT, 3 * config.TILE, grid
     )
     assert beam.end.x == pytest.approx(origin.x + 3 * config.TILE)
+
+
+def test_renderer_draws_river_and_bridge_without_steel_fallback():
+    screen = pygame.Surface(
+        (config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
+    )
+    world = World(1, seed=6)
+    river = next(
+        (tx, ty)
+        for ty, row in enumerate(world.grid)
+        for tx, tile in enumerate(row)
+        if tile == config.Tile.RIVER
+    )
+    bridge = next(
+        (tx, ty)
+        for ty, row in enumerate(world.grid)
+        for tx, tile in enumerate(row)
+        if tile == config.Tile.BRIDGE
+    )
+    renderer = render.Renderer(screen)
+    renderer.draw_world(world)
+
+    river_center = (
+        config.PLAYFIELD_X + river[0] * config.TILE + config.TILE // 2,
+        config.PLAYFIELD_Y + river[1] * config.TILE + config.TILE // 2,
+    )
+    bridge_center = (
+        config.PLAYFIELD_X + bridge[0] * config.TILE + config.TILE // 2,
+        config.PLAYFIELD_Y + bridge[1] * config.TILE + config.TILE // 2,
+    )
+    river_pixel = tuple(screen.get_at(river_center))[:3]
+    bridge_pixel = tuple(screen.get_at(bridge_center))[:3]
+    assert river_pixel != bridge_pixel
+    assert river_pixel[2] > river_pixel[0]
+
+
+def test_rendering_terrain_does_not_change_gameplay_state():
+    screen = pygame.Surface(
+        (config.SCREEN_WIDTH, config.SCREEN_HEIGHT)
+    )
+    world = World(1, seed=6)
+    river = next(
+        (tx, ty)
+        for ty, row in enumerate(world.grid)
+        for tx, tile in enumerate(row)
+        if tile == config.Tile.RIVER
+    )
+    trap_state = [
+        (trap.tile, trap.armed, trap.cooldown) for trap in world.traps
+    ]
+    renderer = render.Renderer(screen)
+
+    renderer.draw_world(world)
+
+    assert world.grid[river[1]][river[0]] == config.Tile.RIVER
+    assert [
+        (trap.tile, trap.armed, trap.cooldown) for trap in world.traps
+    ] == trap_state
+    player = world.players[0]
+    player.pos = world.tile_center(*river)
+    assert world._rect_collides_tiles(player.rect) is True

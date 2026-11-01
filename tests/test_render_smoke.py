@@ -5,7 +5,10 @@ import pytest
 
 import config
 from game import boss as boss_module
-from game import render
+from game import i18n, render
+from game.hazards import Trap
+from game.pickups import Pickup
+from game.render import Renderer
 from game.upgrades import UPGRADE_POOL
 from game.world import World
 
@@ -119,6 +122,43 @@ def is_elite_telegraph(pixel) -> bool:
 def is_faded_text(pixel) -> bool:
     r, g, b = pixel
     return r > 80 and g > 90 and b > 100
+
+
+def is_trap_amber(pixel) -> bool:
+    r, g, b = pixel
+    return r > 170 and 90 < g < 215 and b < 120
+
+
+def is_trap_red(pixel) -> bool:
+    r, g, b = pixel
+    return r > 170 and g < 120 and b < 120
+
+
+def is_repair_green(pixel) -> bool:
+    r, g, b = pixel
+    return g > 160 and g - r > 35 and g - b > 15
+
+
+def is_stim_cyan(pixel) -> bool:
+    r, g, b = pixel
+    return g > 160 and b > 180 and b - r > 50
+
+
+def is_invincible_gold(pixel) -> bool:
+    r, g, b = pixel
+    return r > 200 and g > 160 and b < 160 and r - b > 70
+
+
+def capture_text(renderer) -> list[str]:
+    labels: list[str] = []
+    original = renderer._text
+
+    def recording(text, *args, **kwargs):
+        labels.append(str(text))
+        return original(text, *args, **kwargs)
+
+    renderer._text = recording
+    return labels
 
 
 def test_draw_world_changes_pixels(screen, world):
@@ -483,3 +523,180 @@ def test_draw_world_draws_elite_telegraph_warning(screen):
         )
         > 20
     )
+
+
+def test_draw_world_with_new_terrain_and_pickups(screen):
+    world = World(5, seed=18)
+    world.pickups = [Pickup("repair", world.tile_center(4, 5))]
+    world.traps.append(Trap((5, 5)))
+    renderer = Renderer(screen)
+    renderer.draw_world(world)
+
+
+def test_hud_with_buff_chips_draws_without_error(screen):
+    world = World(0, seed=19)
+    world.players[0].stim_timer = 12.0
+    world.players[1].invincible_timer = 4.0
+    renderer = Renderer(screen)
+    renderer.draw_world(world)
+
+
+def test_title_shows_hell_and_chinese(screen):
+    renderer = Renderer(screen)
+    renderer.set_language("zh")
+    renderer.draw_title(0.0, "hell")
+
+
+def test_river_and_bridge_render_without_steel_fallback(screen):
+    world = World(1, seed=6)
+    river = next(
+        (tx, ty)
+        for ty, row in enumerate(world.grid)
+        for tx, tile in enumerate(row)
+        if tile == config.Tile.RIVER
+    )
+    bridge = next(
+        (tx, ty)
+        for ty, row in enumerate(world.grid)
+        for tx, tile in enumerate(row)
+        if tile == config.Tile.BRIDGE
+    )
+    renderer = render.Renderer(screen)
+    renderer.draw_world(world)
+
+    river_center = (
+        config.PLAYFIELD_X + river[0] * config.TILE + config.TILE // 2,
+        config.PLAYFIELD_Y + river[1] * config.TILE + config.TILE // 2,
+    )
+    bridge_center = (
+        config.PLAYFIELD_X + bridge[0] * config.TILE + config.TILE // 2,
+        config.PLAYFIELD_Y + bridge[1] * config.TILE + config.TILE // 2,
+    )
+    river_pixel = tuple(screen.get_at(river_center))[:3]
+    bridge_pixel = tuple(screen.get_at(bridge_center))[:3]
+    assert river_pixel != bridge_pixel
+    assert river_pixel[2] > river_pixel[0]
+
+    world.grid[river[1]][river[0]] = config.Tile.STEEL
+    renderer.draw_world(world)
+    steel_pixel = tuple(screen.get_at(river_center))[:3]
+    assert river_pixel != steel_pixel
+
+
+def test_trap_states_draw_distinct_plates(screen):
+    world = World(0, seed=21)
+    trap = world.traps[0]
+    trap.armed = True
+    trap.cooldown = 0.0
+    renderer = render.Renderer(screen)
+    tile_rect = pygame.Rect(
+        config.PLAYFIELD_X + trap.tile[0] * config.TILE,
+        config.PLAYFIELD_Y + trap.tile[1] * config.TILE,
+        config.TILE,
+        config.TILE,
+    )
+
+    renderer.draw_world(world)
+    assert (
+        count_pixels_in_rect(screen, tile_rect, is_trap_amber) > 8
+    )
+
+    trap.armed = False
+    trap.cooldown = config.TRAP_REARM_TIME
+    renderer.draw_world(world)
+    assert (
+        count_pixels_in_rect(screen, tile_rect, is_trap_red) > 8
+    )
+
+
+def test_pickup_kinds_draw_distinct_colors(screen):
+    world = World(0, seed=22)
+    blocked = {trap.tile for trap in world.traps}
+    blocked.update(config.BASE_TILES)
+    blocked.update(config.PLAYER_SPAWNS)
+    tile = next(
+        (tx, ty)
+        for ty in range(4, 7)
+        for tx in range(2, config.GRID_COLS - 2)
+        if world.grid[ty][tx] == config.Tile.EMPTY
+        and (tx, ty) not in blocked
+    )
+    tile_rect = pygame.Rect(
+        config.PLAYFIELD_X + tile[0] * config.TILE,
+        config.PLAYFIELD_Y + tile[1] * config.TILE,
+        config.TILE,
+        config.TILE,
+    )
+    renderer = render.Renderer(screen)
+
+    checks = (
+        ("repair", is_repair_green),
+        ("stim", is_stim_cyan),
+        ("invincible", is_invincible_gold),
+    )
+    for kind, predicate in checks:
+        world.pickups = [Pickup(kind, world.tile_center(*tile))]
+        renderer.draw_world(world)
+        assert count_pixels_in_rect(screen, tile_rect, predicate) > 8
+
+
+def test_buff_chips_show_role_markers(screen):
+    world = World(0, seed=19)
+    world.players[0].stim_timer = 12.0
+    world.players[0].immobilized = 2.1
+    world.players[1].stim_timer = 7.5
+    world.players[1].invincible_timer = 4.0
+    renderer = render.Renderer(screen)
+    labels = capture_text(renderer)
+
+    renderer.draw_world(world)
+
+    assert any(label.startswith("R2") for label in labels)
+    assert any(label.startswith("HOLD") for label in labels)
+    assert any(label.startswith("2X") for label in labels)
+    assert any(label.startswith("INV") for label in labels)
+
+
+def test_buff_chips_are_localized(screen):
+    world = World(0, seed=19)
+    world.players[0].stim_timer = 12.0
+    renderer = render.Renderer(screen)
+    renderer.set_language("zh")
+    labels = capture_text(renderer)
+
+    renderer.draw_world(world)
+
+    assert any(
+        label.startswith(i18n.tr("zh", "hud.buff_r2"))
+        for label in labels
+    )
+
+
+def test_level_card_shows_difficulty_label(screen):
+    renderer = render.Renderer(screen)
+    for key, label_key in (
+        ("normal", "difficulty.normal"),
+        ("hell", "difficulty.hell"),
+    ):
+        world = World(0, seed=1, difficulty=key)
+        labels = capture_text(renderer)
+        renderer.draw_world(world)
+        assert i18n.tr("en", label_key) in labels
+
+        renderer.set_language("zh")
+        labels = capture_text(renderer)
+        renderer.draw_world(world)
+        assert i18n.tr("zh", label_key) in labels
+        renderer.set_language("en")
+
+
+def test_gameover_prompts_are_localized(screen):
+    world = World(0, seed=1)
+    renderer = render.Renderer(screen)
+    renderer.set_language("zh")
+    labels = capture_text(renderer)
+
+    renderer.draw_game_over(world, "gameover.base_destroyed")
+
+    assert i18n.tr("zh", "gameover.retry") in labels
+    assert i18n.tr("zh", "gameover.quit") in labels

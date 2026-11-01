@@ -29,7 +29,7 @@ _SYSTEM_CJK_FONTS = (
 )
 
 _HUD_INNER_Y = 10
-_HUD_CARD_HEIGHT = 76
+_HUD_CARD_HEIGHT = 84
 _HUD_PANEL = (10, 16, 24)
 _HUD_BORDER = (42, 78, 102)
 _HUD_TEXT = (222, 238, 250)
@@ -48,6 +48,19 @@ _BOSS_PHASE_COLORS = {
     3: (226, 96, 255),
 }
 _REVIVE_DIAMOND = (208, 238, 250)
+_RIVER_DEEP = (12, 34, 56)
+_RIVER_MID = (18, 52, 82)
+_RIVER_WAVE = (64, 158, 198)
+_BRIDGE_DECK = (44, 68, 92)
+_BRIDGE_PLANK = (78, 112, 140)
+_TRAP_PLATE = (24, 30, 40)
+_TRAP_ARMED = (255, 176, 64)
+_TRAP_TRIGGERED = (232, 74, 74)
+_TRAP_COOLDOWN = (104, 116, 130)
+_PICKUP_GREEN = (96, 232, 144)
+_PICKUP_CYAN = (92, 222, 244)
+_PICKUP_GOLD = (255, 214, 92)
+_PICKUP_HOLD = (255, 140, 70)
 
 
 def _clamp_channel(value: float) -> int:
@@ -365,6 +378,27 @@ class Renderer:
         ]
         pygame.draw.polygon(self.screen, color, points, width)
 
+    def _star_points(
+        self,
+        center: tuple[float, float],
+        outer: float,
+        inner: float,
+        points: int,
+        rotation: float = 0.0,
+    ) -> list[tuple[int, int]]:
+        cx, cy = center
+        result: list[tuple[int, int]] = []
+        for index in range(points * 2):
+            radius = outer if index % 2 == 0 else inner
+            angle = rotation + index * math.pi / points
+            result.append(
+                (
+                    int(cx + math.cos(angle) * radius),
+                    int(cy + math.sin(angle) * radius),
+                )
+            )
+        return result
+
     def _dashed_circle(
         self,
         color: tuple[int, ...],
@@ -546,16 +580,138 @@ class Renderer:
                 position = (tx * config.TILE, ty * config.TILE)
                 if tile == config.Tile.BRICK:
                     self._wall_surface.blit(self._brick_image, position)
-                else:
+                elif tile == config.Tile.STEEL:
                     self._wall_surface.blit(self._steel_image, position)
                     self._wall_glow.blit(
                         self._steel_glow_image,
                         position,
                         special_flags=pygame.BLEND_RGB_ADD,
                     )
+                else:
+                    continue
+
+    def _draw_river_tile(
+        self,
+        rect: pygame.Rect,
+        tx: int,
+        ty: int,
+        elapsed: float,
+    ) -> None:
+        pygame.draw.rect(self.screen, _RIVER_DEEP, rect)
+        band_height = max(1, rect.height // 4)
+        for band in range(4):
+            band_rect = pygame.Rect(
+                rect.left,
+                rect.top + band * band_height,
+                rect.width,
+                band_height,
+            )
+            shade = 0.55 + band * 0.12
+            pygame.draw.rect(
+                self.screen, _scale(_RIVER_MID, shade), band_rect
+            )
+
+        for line_index in range(3):
+            base_y = rect.top + 11 + line_index * 12
+            points = []
+            for step in range(0, rect.width + 1, 6):
+                phase = (
+                    elapsed * 2.2
+                    + (rect.left + step) * 0.07
+                    + line_index * 1.7
+                    + ty * 0.9
+                )
+                points.append(
+                    (
+                        rect.left + step,
+                        int(base_y + math.sin(phase) * 3),
+                    )
+                )
+            shade = 0.55 if line_index % 2 else 0.85
+            pygame.draw.lines(
+                self.screen,
+                _scale(_RIVER_WAVE, shade),
+                False,
+                points,
+                1,
+            )
+
+        sparkle_x = rect.left + int(
+            (elapsed * 16.0 + tx * 19.0) % max(1, rect.width)
+        )
+        sparkle_y = rect.top + 16 + int(
+            6 * math.sin(elapsed * 3.0 + tx)
+        )
+        pygame.draw.circle(
+            self.screen, (148, 218, 244), (sparkle_x, sparkle_y), 1
+        )
+
+    def _draw_bridge_tile(
+        self, rect: pygame.Rect, elapsed: float
+    ) -> None:
+        pygame.draw.rect(self.screen, (14, 24, 36), rect)
+        deck = rect.inflate(-10, -2)
+        pygame.draw.rect(
+            self.screen, _BRIDGE_DECK, deck, border_radius=3
+        )
+        slat_height = max(4, (deck.height - 10) // 4)
+        for index in range(4):
+            top = deck.top + 4 + index * (slat_height + 1)
+            slat = pygame.Rect(
+                deck.left + 3, top, deck.width - 6, slat_height
+            )
+            if slat.bottom > deck.bottom - 3:
+                slat.height = max(2, deck.bottom - 3 - slat.top)
+            pygame.draw.rect(
+                self.screen, _BRIDGE_PLANK, slat, border_radius=2
+            )
+            pygame.draw.line(
+                self.screen,
+                _scale(_BRIDGE_PLANK, 1.25),
+                (slat.left + 1, slat.top),
+                (slat.right - 2, slat.top),
+                1,
+            )
+
+        pulse = 0.5 + 0.5 * math.sin(elapsed * 4.0)
+        edge = _scale(_HOLO_EDGE, 0.55 + 0.35 * pulse)
+        pygame.draw.rect(
+            self.screen, edge, deck, width=1, border_radius=3
+        )
+        for rail_x in (deck.left + 2, deck.right - 3):
+            pygame.draw.line(
+                self.screen,
+                edge,
+                (rail_x, deck.top + 3),
+                (rail_x, deck.bottom - 3),
+                1,
+            )
+        self._glow_rect(_HOLO_EDGE, deck, 0.14 + 0.08 * pulse)
+
+    def _draw_water(
+        self, world, offset: tuple[int, int]
+    ) -> None:
+        ox, oy = offset
+        for ty, row in enumerate(world.grid):
+            for tx, tile in enumerate(row):
+                if tile not in (config.Tile.RIVER, config.Tile.BRIDGE):
+                    continue
+                rect = pygame.Rect(
+                    config.PLAYFIELD_X + tx * config.TILE + ox,
+                    config.PLAYFIELD_Y + ty * config.TILE + oy,
+                    config.TILE,
+                    config.TILE,
+                )
+                if tile == config.Tile.RIVER:
+                    self._draw_river_tile(
+                        rect, tx, ty, world.elapsed
+                    )
+                else:
+                    self._draw_bridge_tile(rect, world.elapsed)
 
     def _draw_tiles(self, world, offset: tuple[int, int]) -> None:
         self._ensure_wall_layer(world)
+        self._draw_water(world, offset)
         position = (
             config.PLAYFIELD_X + offset[0],
             config.PLAYFIELD_Y + offset[1],
@@ -566,6 +722,180 @@ class Renderer:
             special_flags=pygame.BLEND_RGB_ADD,
         )
         self.screen.blit(self._wall_surface, position)
+
+    def _draw_traps(self, world, offset: tuple[int, int]) -> None:
+        ox, oy = offset
+        for trap in world.traps:
+            tx, ty = trap.tile
+            rect = pygame.Rect(
+                config.PLAYFIELD_X + tx * config.TILE + ox,
+                config.PLAYFIELD_Y + ty * config.TILE + oy,
+                config.TILE,
+                config.TILE,
+            )
+            self._draw_trap(trap, rect, world.elapsed)
+
+    def _draw_trap(
+        self,
+        trap,
+        rect: pygame.Rect,
+        elapsed: float,
+    ) -> None:
+        plate = rect.inflate(-14, -14)
+        pygame.draw.rect(
+            self.screen, _TRAP_PLATE, plate, border_radius=5
+        )
+        center = plate.center
+        if trap.armed:
+            pulse = 0.5 + 0.5 * math.sin(elapsed * 6.0)
+            color = _scale(_TRAP_ARMED, 0.8 + 0.25 * pulse)
+            self._glow_circle(
+                _TRAP_ARMED,
+                center,
+                24,
+                strength=0.22 + 0.14 * pulse,
+            )
+            self._diamond(center, 8 + int(3 * pulse), color, 2)
+            pygame.draw.circle(self.screen, color, center, 2)
+            for dx, dy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+                start = (center[0] + dx * 13, center[1] + dy * 9)
+                end = (center[0] + dx * 9, center[1] + dy * 13)
+                pygame.draw.line(
+                    self.screen, color, start, end, 2
+                )
+        elif trap.cooldown > config.TRAP_REARM_TIME * 0.5:
+            color = _TRAP_TRIGGERED
+            self._glow_circle(color, center, 24, strength=0.3)
+            pygame.draw.line(
+                self.screen,
+                color,
+                (center[0] - 9, center[1] - 9),
+                (center[0] + 9, center[1] + 9),
+                3,
+            )
+            pygame.draw.line(
+                self.screen,
+                color,
+                (center[0] + 9, center[1] - 9),
+                (center[0] - 9, center[1] + 9),
+                3,
+            )
+        else:
+            color = _TRAP_COOLDOWN
+            ratio = max(
+                0.0,
+                min(
+                    1.0,
+                    trap.cooldown
+                    / max(config.TRAP_REARM_TIME, 0.001),
+                ),
+            )
+            pygame.draw.circle(self.screen, color, center, 9, 1)
+            arc_rect = pygame.Rect(0, 0, 22, 22)
+            arc_rect.center = center
+            pygame.draw.arc(
+                self.screen,
+                _scale(color, 1.15),
+                arc_rect,
+                math.pi / 2,
+                math.pi / 2 + math.tau * ratio,
+                2,
+            )
+        pygame.draw.rect(
+            self.screen,
+            _scale(color, 0.6),
+            plate,
+            width=1,
+            border_radius=5,
+        )
+
+    def _draw_pickups(self, world, offset: tuple[int, int]) -> None:
+        for pickup in world.pickups:
+            self._draw_pickup(pickup, offset, world.elapsed)
+
+    def _draw_pickup(
+        self,
+        pickup,
+        offset: tuple[int, int],
+        elapsed: float,
+    ) -> None:
+        center = pickup.rect.move(offset).center
+        cx, cy = center
+        if pickup.kind == "stim":
+            color = _PICKUP_CYAN
+        elif pickup.kind == "invincible":
+            color = _PICKUP_GOLD
+        else:
+            color = _PICKUP_GREEN
+
+        brightness = 1.0
+        if pickup.ttl < 5.0 and int(elapsed * 10.0) % 2:
+            brightness = 0.45
+        visible = _scale(color, brightness)
+
+        self._glow_circle(
+            color, center, 24, strength=0.45 * brightness
+        )
+        pygame.draw.circle(self.screen, (10, 18, 26), center, 13)
+        pygame.draw.circle(
+            self.screen, _scale(color, 0.55), center, 13, 1
+        )
+
+        if pickup.kind == "repair":
+            pygame.draw.rect(
+                self.screen, visible, (cx - 3, cy - 8, 6, 16)
+            )
+            pygame.draw.rect(
+                self.screen, visible, (cx - 8, cy - 3, 16, 6)
+            )
+            pygame.draw.rect(
+                self.screen,
+                _scale((220, 255, 235), brightness),
+                (cx - 1, cy - 6, 2, 12),
+            )
+        elif pickup.kind == "stim":
+            rotation = elapsed * 2.6
+            points = []
+            for index in range(4):
+                angle = rotation + index * math.pi / 2
+                points.append(
+                    (
+                        int(cx + math.cos(angle) * 10),
+                        int(cy + math.sin(angle) * 10),
+                    )
+                )
+            pygame.draw.polygon(self.screen, visible, points)
+            inner = []
+            for index in range(4):
+                angle = rotation + index * math.pi / 2
+                inner.append(
+                    (
+                        int(cx + math.cos(angle) * 4),
+                        int(cy + math.sin(angle) * 4),
+                    )
+                )
+            pygame.draw.polygon(
+                self.screen,
+                _scale((230, 252, 255), brightness),
+                inner,
+            )
+        else:
+            pulse = 0.5 + 0.5 * math.sin(elapsed * 5.0)
+            outer = 9 + 2 * pulse
+            points = self._star_points(
+                center,
+                outer,
+                outer * 0.45,
+                5,
+                -math.pi / 2 + elapsed * 0.9,
+            )
+            pygame.draw.polygon(self.screen, visible, points)
+            pygame.draw.polygon(
+                self.screen,
+                _scale((255, 248, 210), brightness),
+                points,
+                1,
+            )
 
     def _tank_surface(
         self,
@@ -1363,6 +1693,71 @@ class Renderer:
                 color,
                 player.eliminated,
             )
+        self._draw_buff_chips(player, rect, color)
+
+    def _draw_buff_chips(
+        self,
+        player,
+        rect: pygame.Rect,
+        color: tuple[int, ...],
+    ) -> None:
+        chips: list[tuple[str, float, tuple[int, ...]]] = []
+        stim = getattr(player, "stim_timer", 0.0)
+        if stim > 0.0:
+            key = (
+                "hud.buff_r2"
+                if player.player_id == 0
+                else "hud.buff_2x"
+            )
+            chips.append((key, stim, color))
+        invincible = getattr(player, "invincible_timer", 0.0)
+        if invincible > 0.0:
+            chips.append(("hud.buff_inv", invincible, _PICKUP_GOLD))
+        hold = getattr(player, "immobilized", 0.0)
+        if hold > 0.0:
+            chips.append(("hud.buff_hold", hold, _PICKUP_HOLD))
+        chips = chips[:2]
+        if not chips:
+            return
+
+        labels = [
+            (self.tr(key), seconds, chip_color)
+            for key, seconds, chip_color in chips
+        ]
+        texts = [
+            f"{label} {seconds:.1f}"
+            for label, seconds, _ in labels
+        ]
+        widths = [self.font_xs.size(text)[0] + 12 for text in texts]
+        gap = 4
+        total = sum(widths) + gap * (len(widths) - 1)
+        x = rect.right - 8 - total
+        y = rect.top + 56
+        for text, width, (_, _, chip_color) in zip(
+            texts, widths, labels
+        ):
+            chip = pygame.Rect(x, y, width, 20)
+            pygame.draw.rect(
+                self.screen,
+                _scale(chip_color, 0.18),
+                chip,
+                border_radius=4,
+            )
+            pygame.draw.rect(
+                self.screen,
+                _scale(chip_color, 0.6),
+                chip,
+                width=1,
+                border_radius=4,
+            )
+            self._text(
+                text,
+                self.font_xs,
+                chip_color,
+                (chip.left + 6, chip.top + 1),
+                shadow=False,
+            )
+            x += width + gap
 
     def _draw_cooldown(
         self,
@@ -1514,6 +1909,21 @@ class Renderer:
             (rect.right - 8, rect.top + 8),
             align="right",
         )
+        difficulty_key = getattr(
+            getattr(world, "difficulty", None), "key", "normal"
+        )
+        difficulty_color = (
+            config.ENEMY_RED
+            if difficulty_key == "hell"
+            else config.P1_BLUE
+        )
+        self._text(
+            self.tr(f"difficulty.{difficulty_key}"),
+            self.font_xs,
+            difficulty_color,
+            (rect.centerx, rect.top + 8),
+            align="center",
+        )
         track_left = rect.left + 16
         track_right = rect.right - 16
         y = rect.top + 42
@@ -1603,6 +2013,8 @@ class Renderer:
 
         self._begin_glow()
         self._draw_tiles(world, offset)
+        self._draw_traps(world, offset)
+        self._draw_pickups(world, offset)
         self._draw_base(world, offset)
         self._draw_players(world, offset)
         self._draw_enemies(world, offset)
