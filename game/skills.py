@@ -123,6 +123,17 @@ class LaserBeam:
         self.life = max(0.0, self.life - dt)
 
 
+def offset_laser_origin(
+    origin: tuple[float, float] | pygame.Vector2,
+    direction: config.Direction,
+    offset: float,
+) -> pygame.Vector2:
+    origin = pygame.Vector2(origin)
+    dx, dy = config.Direction(direction).vector
+    perpendicular = pygame.Vector2(-dy, dx)
+    return origin + perpendicular * float(offset)
+
+
 def _tile_face_distance(
     origin: pygame.Vector2,
     direction: config.Direction,

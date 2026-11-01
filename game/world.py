@@ -18,7 +18,12 @@ from game.input import PlayerInput
 from game.levelgen import Level, generate_level
 from game.pathfinding import astar
 from game.pickups import Pickup, roll_pickup_kind
-from game.skills import Grenade, compute_laser, point_near_segment
+from game.skills import (
+    Grenade,
+    compute_laser,
+    offset_laser_origin,
+    point_near_segment,
+)
 from game.upgrades import apply_upgrade as _apply_upgrade
 
 _BULLET_SUBSTEP = 6.0
@@ -731,12 +736,17 @@ class World:
             return False
 
         stats = player.stats
+        radius = stats.grenade_radius * (
+            config.STIM_GRENADE_RADIUS_MULT
+            if player.stim_timer > 0.0
+            else 1.0
+        )
         grenade = Grenade(
             player.center,
             player.direction,
             owner_id=player.player_id,
             damage=stats.grenade_damage,
-            radius=stats.grenade_radius,
+            radius=radius,
             split=stats.grenade_split,
         )
         self.grenades.append(grenade)
@@ -757,6 +767,9 @@ class World:
             return False
 
         stats = player.stats
+        if player.stim_timer > 0.0:
+            return self._fire_twin_laser(player, stats)
+
         beam = compute_laser(
             player.center,
             player.direction,
@@ -801,6 +814,78 @@ class World:
             )
         ):
             self._damage_boss(stats.laser_damage)
+
+        self.effects.shake(2.0)
+        self._check_progression()
+        return True
+
+    def _fire_twin_laser(self, player: Player, stats) -> bool:
+        snapshot = [row[:] for row in self.grid]
+        beams = [
+            compute_laser(
+                offset_laser_origin(
+                    player.center,
+                    player.direction,
+                    side * config.LASER_TWIN_OFFSET,
+                ),
+                player.direction,
+                stats.laser_range,
+                snapshot,
+            )
+            for side in (-1.0, 1.0)
+        ]
+        self.lasers.extend(beams)
+        player.laser_timer = stats.laser_cooldown
+        self.effects.burst(player.center, config.HOLO_WHITE, count=4)
+
+        damage = max(
+            1,
+            round(stats.laser_damage * config.LASER_TWIN_DAMAGE_FACTOR),
+        )
+        destroyed_bricks: set[tuple[int, int]] = set()
+        hit_enemy_ids: set[int] = set()
+        hit_boss = False
+
+        for beam in beams:
+            if (
+                beam.brick_tile is not None
+                and beam.brick_tile not in destroyed_bricks
+            ):
+                destroyed_bricks.add(beam.brick_tile)
+                self.destroy_brick(*beam.brick_tile)
+
+            for enemy in self.enemies:
+                if not enemy.alive or id(enemy) in hit_enemy_ids:
+                    continue
+                if not point_near_segment(
+                    enemy.center,
+                    beam.origin,
+                    beam.end,
+                    config.LASER_HIT_TOLERANCE,
+                ):
+                    continue
+                hit_enemy_ids.add(id(enemy))
+                destroyed = enemy.take_damage(damage, self)
+                if destroyed:
+                    self.effects.burst(
+                        enemy.center, config.ENEMY_RED, count=16
+                    )
+                    self.effects.shake(2.5)
+                else:
+                    self.effects.burst(
+                        enemy.center, config.ENEMY_ORANGE, count=5
+                    )
+
+            if (
+                not hit_boss
+                and self.boss is not None
+                and self.boss.alive
+                and self.boss.rect.clipline(
+                    (beam.origin.x, beam.origin.y, beam.end.x, beam.end.y)
+                )
+            ):
+                hit_boss = True
+                self._damage_boss(damage)
 
         self.effects.shake(2.0)
         self._check_progression()
