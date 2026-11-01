@@ -206,6 +206,23 @@ def _build_grid(
     return grid
 
 
+_BASE_GUARD_OFFSET = 2
+
+
+def _place_base_guard(
+    grid: list[list[Tile]],
+    rng: random.Random,
+    column: int | None = None,
+) -> tuple[int, int] | None:
+    front_y = min(ty for _, ty in BASE_TILES) - _BASE_GUARD_OFFSET
+    columns = sorted({tx for tx, _ in BASE_TILES})
+    tx = rng.choice(columns) if column is None else column
+    if 0 <= front_y < len(grid) and 0 <= tx < len(grid[front_y]):
+        grid[front_y][tx] = Tile.STEEL
+        return (tx, front_y)
+    return None
+
+
 def _route_overlap(
     first: list[tuple[int, int]],
     second: list[tuple[int, int]],
@@ -442,8 +459,11 @@ def generate_level(seed: int, level_index: int = 0) -> Level:
     trap_rng = random.Random(f"{seed}:{level_index}:traps")
     for _ in range(GENERATION_RETRIES):
         attempt_seed = seed_rng.randrange(1 << 31)
+        attempt_rng = random.Random(attempt_seed)
+        grid = _build_grid(attempt_rng, river_count)
+        _place_base_guard(grid, attempt_rng)
         level = Level(
-            grid=_build_grid(random.Random(attempt_seed), river_count),
+            grid=grid,
             spawns=ENEMY_SPAWNS,
             base_tiles=BASE_TILES,
             seed=seed,
@@ -494,12 +514,34 @@ def fallback_level(river_count: int = 1, level_index: int = 0) -> Level:
     if river_count > 0:
         _carve_rivers(grid, random.Random(0), river_count)
 
-    level = Level(
-        grid=grid,
-        spawns=ENEMY_SPAWNS,
-        base_tiles=BASE_TILES,
-        seed=0,
-    )
+    guard_rng = random.Random(f"fallback:{level_index}:guard")
+    front_y = min(ty for _, ty in BASE_TILES) - _BASE_GUARD_OFFSET
+    columns = sorted({tx for tx, _ in BASE_TILES})
+    guard_rng.shuffle(columns)
+    level: Level | None = None
+    for tx in columns:
+        previous = grid[front_y][tx]
+        _place_base_guard(grid, guard_rng, column=tx)
+        candidate = Level(
+            grid=grid,
+            spawns=ENEMY_SPAWNS,
+            base_tiles=BASE_TILES,
+            seed=0,
+        )
+        if validate_level(candidate):
+            level = candidate
+            break
+        grid[front_y][tx] = previous
+
+    if level is None:
+        _place_base_guard(grid, guard_rng)
+        level = Level(
+            grid=grid,
+            spawns=ENEMY_SPAWNS,
+            base_tiles=BASE_TILES,
+            seed=0,
+        )
+
     level.traps = _place_traps(
         level,
         level_index,

@@ -93,9 +93,15 @@ def _assert_structural_invariants(level: Level) -> None:
                 if 0 <= tx < GRID_COLS and 0 <= ty < GRID_ROWS:
                     assert level.grid[ty][tx] != Tile.STEEL
 
+    guard_y = min(ty for _, ty in BASE_TILES) - 2
+    guard_tiles = {
+        (tx, guard_y) for tx, _ in BASE_TILES
+    }
     for start, end in CORRIDOR_BANDS:
         for tx in range(start, end + 1):
             for ty in range(1, GRID_ROWS - 1):
+                if (tx, ty) in guard_tiles:
+                    continue
                 assert level.grid[ty][tx] != Tile.STEEL
 
 
@@ -223,3 +229,22 @@ def test_rivers_never_overwrite_player_spawn_safe_rows(level_index):
         for ty, row in enumerate(level.grid):
             if any(tile in (Tile.RIVER, Tile.BRIDGE) for tile in row):
                 assert ty <= 8
+
+
+@pytest.mark.parametrize("level_index", range(LEVEL_COUNT))
+def test_base_guard_places_one_steel_block_two_tiles_in_front(level_index):
+    front_y = min(ty for _, ty in BASE_TILES) - 2
+    front_columns = sorted({tx for tx, _ in BASE_TILES})
+    for seed in range(5):
+        level = generate_level(seed, level_index)
+        assert any(
+            level.grid[front_y][tx] == Tile.STEEL
+            for tx in front_columns
+        )
+
+
+def test_fallback_level_has_the_base_guard_block():
+    level = fallback_level(level_index=3)
+    front_y = min(ty for _, ty in BASE_TILES) - 2
+    front_columns = sorted({tx for tx, _ in BASE_TILES})
+    assert any(level.grid[front_y][tx] == Tile.STEEL for tx in front_columns)
