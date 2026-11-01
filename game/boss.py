@@ -275,7 +275,9 @@ class Boss:
                 config.BOSS_BULLET_DAMAGE,
             )
         elif attack.kind == "laser":
-            direction = attack.direction or config.Direction.DOWN
+            direction = attack.direction
+            if direction is None:
+                direction = config.Direction.DOWN
             world.boss_laser(self.center, direction)
 
     def _refresh_telegraph(self) -> None:

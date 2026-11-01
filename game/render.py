@@ -203,6 +203,7 @@ class Renderer:
         pos: tuple[float, float],
         align: str = "left",
         shadow: bool = True,
+        alpha: int = 255,
     ) -> pygame.Rect:
         image = font.render(str(text), True, color)
         rect = image.get_rect()
@@ -212,8 +213,13 @@ class Renderer:
             rect.topright = (int(pos[0]), int(pos[1]))
         else:
             rect.topleft = (int(pos[0]), int(pos[1]))
+        alpha = max(0, min(255, int(alpha)))
+        if alpha < 255:
+            image.set_alpha(alpha)
         if shadow:
             shadow_image = font.render(str(text), True, (0, 0, 0))
+            if alpha < 255:
+                shadow_image.set_alpha(alpha)
             self.screen.blit(shadow_image, rect.move(1, 2))
         self.screen.blit(image, rect)
         return rect
@@ -983,7 +989,9 @@ class Renderer:
                 (255, 122, 64), center, radius, strength=0.25
             )
         elif kind == "laser":
-            direction = boss.telegraph_direction or config.Direction.DOWN
+            direction = boss.telegraph_direction
+            if direction is None:
+                direction = config.Direction.DOWN
             dx, dy = direction.vector
             length = max(config.PLAYFIELD_WIDTH, config.PLAYFIELD_HEIGHT)
             end = (cx + dx * length, cy + dy * length)
@@ -998,11 +1006,15 @@ class Renderer:
         for bullet in world.bullets:
             if not bullet.alive:
                 continue
-            color = (
-                (150, 220, 255)
-                if bullet.friendly
-                else (255, 110, 80)
-            )
+            if bullet.friendly:
+                if bullet.owner_id == 0:
+                    color = config.P1_BLUE
+                elif bullet.owner_id == 1:
+                    color = config.P2_AMBER
+                else:
+                    color = (150, 220, 255)
+            else:
+                color = (255, 110, 80)
             center = (
                 int(bullet.pos.x + ox),
                 int(bullet.pos.y + oy),
@@ -1234,24 +1246,26 @@ class Renderer:
             self.screen, _scale(color, 0.6), hp_bar, 1, border_radius=3
         )
 
-        self._draw_cooldown(
-            rect,
-            rect.top + 40,
-            "GRN",
-            player.grenade_timer,
-            player.stats.grenade_cooldown,
-            color,
-            player.eliminated,
-        )
-        self._draw_cooldown(
-            rect,
-            rect.top + 56,
-            "LSR",
-            player.laser_timer,
-            player.stats.laser_cooldown,
-            color,
-            player.eliminated,
-        )
+        if player.player_id == 0:
+            self._draw_cooldown(
+                rect,
+                rect.top + 48,
+                "GRN",
+                player.grenade_timer,
+                player.stats.grenade_cooldown,
+                color,
+                player.eliminated,
+            )
+        else:
+            self._draw_cooldown(
+                rect,
+                rect.top + 48,
+                "LSR",
+                player.laser_timer,
+                player.stats.laser_cooldown,
+                color,
+                player.eliminated,
+            )
 
     def _draw_cooldown(
         self,
@@ -1411,7 +1425,12 @@ class Renderer:
             elif index == current:
                 color = _ELITE_MAGENTA if is_boss else config.P1_BLUE
                 radius = 7
-                self._glow_circle(color, (x, y), 14, strength=0.6)
+                pygame.draw.circle(
+                    self.screen, _scale(color, 0.18), (x, y), 14
+                )
+                pygame.draw.circle(
+                    self.screen, _scale(color, 0.34), (x, y), 10
+                )
             else:
                 color = (52, 70, 88)
                 radius = 4
@@ -1435,7 +1454,7 @@ class Renderer:
 
     def _draw_enemy_counter(self, world, rect: pygame.Rect) -> None:
         self._panel(rect, fill=_HUD_PANEL, border=_HUD_BORDER)
-        boss_level = world.boss is not None
+        boss_level = world.boss is not None and world.boss.alive
         label = "BOSS" if boss_level else "ENEMY"
         self._text(
             label,
@@ -1898,6 +1917,7 @@ class Renderer:
             color,
             (cx, 292),
             align="center",
+            alpha=alpha,
         )
         self._text(
             "SURVIVE THE ARMORY" if is_boss else "GET READY",
@@ -1905,6 +1925,7 @@ class Renderer:
             config.P2_AMBER if is_boss else config.P1_BLUE,
             (cx, 348),
             align="center",
+            alpha=alpha,
         )
         shown_level = max(1, min(config.LEVEL_COUNT, level_index + 1))
         self._text(
@@ -1913,4 +1934,5 @@ class Renderer:
             (150, 180, 202),
             (cx, 382),
             align="center",
+            alpha=alpha,
         )
