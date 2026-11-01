@@ -10,8 +10,8 @@ from game.world import World
 def test_profiles_match_spec():
     normal = difficulty.get_profile("normal")
     hell = difficulty.get_profile("hell")
-    assert normal.base_hp == 3
-    assert hell.base_hp == 6
+    assert normal.base_hp == 4
+    assert hell.base_hp == 8
     assert hell.enemy_hp_mult == 1.5
     assert hell.enemy_fire_interval_mult == 0.8
     assert hell.enemy_attack_range_mult == 1.15
@@ -41,8 +41,8 @@ def test_scaling_does_not_mutate_global_enemy_templates():
 def test_world_uses_difficulty_for_base_and_spawn_interval():
     normal = World(0, seed=1, difficulty="normal")
     hell = World(0, seed=1, difficulty="hell")
-    assert normal.base.max_hp == 3
-    assert hell.base.max_hp == 6
+    assert normal.base.max_hp == 4
+    assert hell.base.max_hp == 8
     assert hell._spawn_interval() == pytest.approx(
         normal._spawn_interval() * 0.8
     )

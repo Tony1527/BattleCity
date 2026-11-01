@@ -71,8 +71,8 @@ def test_difficulty_and_spawn_constants_match_spec():
         2.4,
         0.0,
     )
-    assert config.BASE_HP_NORMAL == 3
-    assert config.BASE_HP_HELL == 6
+    assert config.BASE_HP_NORMAL == 4
+    assert config.BASE_HP_HELL == 8
     assert config.ELITE_SPAWN_INTERVAL == 22.0
     assert config.ELITE_RETRY_INTERVAL == 2.0
     assert config.ELITE_MAX_ACTIVE == 2

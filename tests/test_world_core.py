@@ -107,9 +107,9 @@ def test_world_constructs_level_players_base_and_stats():
 def test_world_defaults_match_spec_literals():
     world = World(0, seed=1)
 
-    assert config.BASE_HP == 3
-    assert world.base.max_hp == 3
-    assert world.base.hp == 3
+    assert config.BASE_HP == 4
+    assert world.base.max_hp == 4
+    assert world.base.hp == 4
 
 
 def test_base_entrances_is_a_data_attribute():

@@ -9,7 +9,7 @@ def test_base_starts_at_configured_full_health():
     base = entities.Base()
 
     assert base.tiles == config.BASE_TILES
-    assert base.hp == config.BASE_HP == 3
+    assert base.hp == config.BASE_HP == 4
     assert base.max_hp == config.BASE_HP
     assert base.shield == 0
     assert base.alive is True
@@ -37,11 +37,11 @@ def test_base_shield_absorbs_damage_before_health():
 
     base.take_damage(1)
     assert base.shield == 1
-    assert base.hp == 3
+    assert base.hp == 4
 
     base.take_damage(2)
     assert base.shield == 0
-    assert base.hp == 2
+    assert base.hp == 3
     assert base.alive is True
 
 
