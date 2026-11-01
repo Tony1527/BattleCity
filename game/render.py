@@ -1,12 +1,32 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import pygame
 
 import config
 from game import i18n
 from game.upgrades import Upgrade
+
+_FONT_SIZES = (
+    ("font_xs", 18),
+    ("font_s", 22),
+    ("font_m", 30),
+    ("font_l", 48),
+    ("font_xl", 84),
+)
+_SYSTEM_CJK_FONTS = (
+    "pingfangsc",
+    "hiraginosansgb",
+    "stheiti",
+    "heiti sc",
+    "microsoftyahei",
+    "simhei",
+    "notosanscjksc",
+    "notosanssc",
+    "arialunicodems",
+)
 
 _HUD_INNER_Y = 10
 _HUD_CARD_HEIGHT = 76
@@ -42,11 +62,12 @@ class Renderer:
     def __init__(self, screen: pygame.Surface) -> None:
         self.screen = screen
         self.width, self.height = screen.get_size()
-        self.font_xs = pygame.font.Font(None, 18)
-        self.font_s = pygame.font.Font(None, 22)
-        self.font_m = pygame.font.Font(None, 30)
-        self.font_l = pygame.font.Font(None, 48)
-        self.font_xl = pygame.font.Font(None, 84)
+        self.font_path: Path | None = None
+        for attribute, size in _FONT_SIZES:
+            font, loaded_path = self._load_font(size)
+            setattr(self, attribute, font)
+            if loaded_path is not None:
+                self.font_path = loaded_path
         self.language = "en"
 
         self.hud_rect = pygame.Rect(
@@ -65,6 +86,28 @@ class Renderer:
         self._wall_signature: tuple | None = None
         self._wall_surface: pygame.Surface | None = None
         self._wall_glow: pygame.Surface | None = None
+
+    def _load_font(
+        self, size: int
+    ) -> tuple[pygame.font.Font, Path | None]:
+        try:
+            if config.FONT_PATH.exists():
+                return (
+                    pygame.font.Font(str(config.FONT_PATH), size),
+                    config.FONT_PATH,
+                )
+        except (OSError, pygame.error):
+            pass
+
+        for name in _SYSTEM_CJK_FONTS:
+            path = pygame.font.match_font(name)
+            if not path:
+                continue
+            try:
+                return pygame.font.Font(path, size), None
+            except (OSError, pygame.error):
+                continue
+        return pygame.font.Font(None, size), None
 
     def set_language(self, language: str) -> None:
         self.language = (

@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import IntEnum
+from pathlib import Path
 
 import pygame
+
+ROOT = Path(__file__).resolve().parent
+FONT_PATH = ROOT / "assets/fonts/NotoSansCJKsc-Regular-subset.otf"
+FONT_LICENSE_PATH = ROOT / "assets/fonts/OFL.txt"
 
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
