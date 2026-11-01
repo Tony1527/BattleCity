@@ -220,6 +220,7 @@ class Game:
         if key == config.PAUSE_KEY:
             if self.state == "playing":
                 self.state = "paused"
+                self._skill_pressed.clear()
             elif self.state == "paused":
                 self.state = "playing"
             return
