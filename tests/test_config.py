@@ -50,7 +50,8 @@ def test_spawns_and_level_progression_constants():
         assert 0 <= ty < config.GRID_ROWS
     assert config.LEVEL_COUNT == 8
     assert config.BOSS_LEVEL == 7
-    assert set(config.ELITE_LEVELS) == {3, 6}
+    assert config.ELITE_COUNTS == (1, 1, 2, 2, 2, 3, 3, 1)
+    assert len(config.ELITE_COUNTS) == config.LEVEL_COUNT
     assert len(config.ENEMY_QUOTA) == config.LEVEL_COUNT
     assert len(config.MAX_ACTIVE_ENEMIES) == config.LEVEL_COUNT
     assert len(config.SPAWN_INTERVAL) == config.LEVEL_COUNT
@@ -70,6 +71,13 @@ def test_difficulty_and_spawn_constants_match_spec():
     )
     assert config.BASE_HP_NORMAL == 3
     assert config.BASE_HP_HELL == 6
+    assert config.ELITE_SPAWN_INTERVAL == 22.0
+    assert config.ELITE_RETRY_INTERVAL == 2.0
+    assert config.ELITE_MAX_ACTIVE == 2
+    assert config.ELITE_HP_BASE == 3
+    assert config.ELITE_SHIELD_BASE == 12
+    assert config.ELITE_SUMMON_INTERVAL == 10.0
+    assert config.ELITE_MAX_SUMMONS == 1
 
 
 def test_player_stats_defaults_match_spec():

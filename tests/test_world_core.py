@@ -95,7 +95,7 @@ def test_world_constructs_level_players_base_and_shared_lives():
     assert world.shared_lives == config.SHARED_LIVES + 1 + 2
     assert world.quota_remaining == config.ENEMY_QUOTA[2]
     assert world.elapsed == 0.0
-    assert world.enemies == []
+    assert [enemy.kind for enemy in world.enemies] == ["elite"]
     assert world.bullets == []
     assert world.grenades == []
     assert world.lasers == []

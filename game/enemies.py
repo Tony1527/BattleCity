@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pygame
 
 import config
@@ -366,14 +368,29 @@ class EliteEnemy(Enemy):
         self,
         pos: tuple[float, float] | pygame.Vector2,
         direction: config.Direction = config.Direction.UP,
+        level_index: int = 0,
+        hp_mult: float = 1.0,
+        shield_mult: float = 1.0,
+        spec: config.EnemySpec | None = None,
     ):
+        gunner_spec = (
+            spec if spec is not None else config.ENEMY_SPECS["gunner"]
+        )
         super().__init__(
             "elite",
             pos,
-            spec=config.ENEMY_SPECS["gunner"],
+            spec=gunner_spec,
             direction=direction,
         )
-        self.shield = config.ELITE_SHIELD
+        self.level_index = max(0, int(level_index))
+        self.max_hp = math.ceil(
+            (config.ELITE_HP_BASE + self.level_index // 2) * hp_mult
+        )
+        self.hp = self.max_hp
+        self.max_shield = math.ceil(
+            (config.ELITE_SHIELD_BASE + self.level_index) * shield_mult
+        )
+        self.shield = self.max_shield
         self.shield_timer = config.ELITE_SHIELD_REGEN
         self.summon_timer = config.ELITE_SUMMON_INTERVAL
         self.summons: list[Enemy] = []
@@ -453,14 +470,12 @@ class EliteEnemy(Enemy):
 
         interval = config.ELITE_SHIELD_REGEN
         if interval <= 0.0:
-            self.shield = min(config.ELITE_SHIELD, self.shield + 1)
+            self.shield = min(self.max_shield, self.shield + 1)
             self.shield_timer = 0.0
             return
 
         ticks = int((-self.shield_timer) // interval) + 1
-        self.shield = min(
-            config.ELITE_SHIELD, self.shield + ticks
-        )
+        self.shield = min(self.max_shield, self.shield + ticks)
         self.shield_timer += ticks * interval
 
     def _update_summons(self, dt: float, world) -> None:
@@ -501,13 +516,26 @@ class EliteEnemy(Enemy):
         return allowed or [(tx, ty)]
 
 
-def make_enemy(kind: str, tile: tuple[int, int]) -> Enemy:
+def make_enemy(
+    kind: str,
+    tile: tuple[int, int],
+    spec: config.EnemySpec | None = None,
+    elite_level: int = 0,
+    elite_hp_mult: float = 1.0,
+    elite_shield_mult: float = 1.0,
+) -> Enemy:
     pos = tile_center(*tile)
     if kind == "elite":
-        return EliteEnemy(pos)
+        return EliteEnemy(
+            pos,
+            level_index=elite_level,
+            hp_mult=elite_hp_mult,
+            shield_mult=elite_shield_mult,
+            spec=spec,
+        )
     if kind not in config.ENEMY_SPECS:
         raise ValueError(f"unknown enemy kind: {kind}")
-    return Enemy(kind, pos)
+    return Enemy(kind, pos, spec=spec)
 
 
 def follow_path(

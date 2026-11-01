@@ -64,7 +64,9 @@ class World:
         self.spawn_quota = 0
         self.spawn_timer = config.SPAWN_START_DELAY
         self.max_active = 0
-        self.elite_spawned = False
+        self.elite_target_count = 0
+        self.elite_spawned_count = 0
+        self.elite_spawn_timer = config.ELITE_SPAWN_INTERVAL
         self.playfield_rect = pygame.Rect(config.PLAYFIELD_RECT)
         self.base_entrances = config.BASE_ENTRANCES
 
@@ -130,7 +132,10 @@ class World:
     def remaining_enemies(self) -> int:
         living = sum(1 for enemy in self.enemies if enemy.alive)
         boss_alive = 1 if self.boss is not None and self.boss.alive else 0
-        return living + self.quota_remaining + boss_alive
+        pending_elites = max(
+            0, self.elite_target_count - self.elite_spawned_count
+        )
+        return living + self.quota_remaining + boss_alive + pending_elites
 
     def point_to_tile(
         self, pos: tuple[float, float] | pygame.Vector2
@@ -245,6 +250,7 @@ class World:
         self.effects.update(dt)
         self._update_skills(dt)
         self._update_spawning(dt)
+        self._update_elite_spawning(dt)
         if self.status != "playing":
             return
 
@@ -447,14 +453,22 @@ class World:
             tile = self._fallback_spawn_tile()
         if tile is None:
             return None
-        if kind in config.ENEMY_SPECS:
-            enemy = Enemy(
+        if kind == "elite":
+            spec = scaled_enemy_spec("gunner", self.difficulty)
+            enemy = make_enemy(
                 kind,
-                tile_center(*tile),
-                spec=scaled_enemy_spec(kind, self.difficulty),
+                tile,
+                spec=spec,
+                elite_level=self.level_index,
+                elite_hp_mult=self.difficulty.elite_hp_mult,
+                elite_shield_mult=self.difficulty.elite_shield_mult,
             )
         else:
-            enemy = make_enemy(kind, tile)
+            enemy = make_enemy(
+                kind,
+                tile,
+                spec=scaled_enemy_spec(kind, self.difficulty),
+            )
         self.enemies.append(enemy)
         return enemy
 
@@ -730,6 +744,12 @@ class World:
                     self.grid[ty][tx] = config.Tile.EMPTY
 
     def _start_level(self) -> None:
+        self.elite_target_count = _level_value(
+            config.ELITE_COUNTS, self.level_index
+        )
+        self.elite_spawned_count = 0
+        self.elite_spawn_timer = config.ELITE_SPAWN_INTERVAL
+
         if self.level_index == config.BOSS_LEVEL:
             self._clear_boss_arena()
             self.boss = Boss(
@@ -740,29 +760,64 @@ class World:
             self.spawn_quota = 0
             self.max_active = 0
             self.spawn_timer = config.SPAWN_START_DELAY
-            return
+        else:
+            quota = _level_value(config.ENEMY_QUOTA, self.level_index)
+            self.quota_remaining = quota
+            self.spawn_quota = quota
+            self.max_active = _level_value(
+                config.MAX_ACTIVE_ENEMIES, self.level_index
+            )
+            self.spawn_timer = config.SPAWN_START_DELAY
 
-        quota = _level_value(config.ENEMY_QUOTA, self.level_index)
-        self.quota_remaining = quota
-        self.spawn_quota = quota
-        self.max_active = _level_value(
-            config.MAX_ACTIVE_ENEMIES, self.level_index
-        )
-        self.spawn_timer = config.SPAWN_START_DELAY
-
-        if self.level_index in config.ELITE_LEVELS:
+        if self.elite_target_count > 0:
             self._spawn_elite()
+            self.elite_spawn_timer = config.ELITE_SPAWN_INTERVAL
 
     def _spawn_elite(self) -> Enemy | None:
-        if self.elite_spawned:
+        if self.elite_spawned_count >= self.elite_target_count:
             return None
         tile = self._choose_spawn_tile()
+        if tile is None:
+            tile = self._fallback_spawn_tile()
         if tile is None:
             return None
         enemy = self.spawn_enemy("elite", tile)
         if enemy is not None:
-            self.elite_spawned = True
+            self.elite_spawned_count += 1
         return enemy
+
+    def _active_elite_count(self) -> int:
+        return sum(
+            1
+            for enemy in self.enemies
+            if enemy.alive and enemy.kind == "elite"
+        )
+
+    def _update_elite_spawning(self, dt: float) -> None:
+        if self.status != "playing":
+            return
+        if self.elite_spawned_count >= self.elite_target_count:
+            return
+
+        if (
+            self.quota_remaining == 0
+            and self.elite_spawn_timer > config.ELITE_RETRY_INTERVAL
+        ):
+            self.elite_spawn_timer = 0.0
+        else:
+            self.elite_spawn_timer = max(
+                0.0, self.elite_spawn_timer - dt
+            )
+
+        if self.elite_spawn_timer > 0.0:
+            return
+        if self._active_elite_count() >= config.ELITE_MAX_ACTIVE:
+            self.elite_spawn_timer = config.ELITE_RETRY_INTERVAL
+            return
+        if self._spawn_elite() is None:
+            self.elite_spawn_timer = config.ELITE_RETRY_INTERVAL
+            return
+        self.elite_spawn_timer = config.ELITE_SPAWN_INTERVAL
 
     def _active_enemy_count(self) -> int:
         return sum(1 for enemy in self.enemies if enemy.alive)
@@ -814,6 +869,7 @@ class World:
         for enemy in self.enemies:
             enemy.alive = False
         self.enemies = []
+        self.elite_spawned_count = self.elite_target_count
         if self.boss is not None:
             self.effects.burst(self.boss.center, config.ENEMY_RED, count=48)
             self.effects.burst(
@@ -830,8 +886,10 @@ class World:
                 self._on_boss_dead()
             return
 
-        if self.quota_remaining <= 0 and not any(
-            enemy.alive for enemy in self.enemies
+        if (
+            self.quota_remaining <= 0
+            and self.elite_spawned_count >= self.elite_target_count
+            and not any(enemy.alive for enemy in self.enemies)
         ):
             self.status = "cleared"
 

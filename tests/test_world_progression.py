@@ -50,9 +50,9 @@ def test_level_start_sets_quota_spawn_settings_and_elite(level):
     assert world.boss is None
 
     elites = [enemy for enemy in world.enemies if isinstance(enemy, EliteEnemy)]
-    expected_elites = 1 if level in config.ELITE_LEVELS else 0
-    assert len(elites) == expected_elites
-    assert world.elite_spawned is bool(expected_elites)
+    assert len(elites) == 1
+    assert world.elite_target_count == config.ELITE_COUNTS[level]
+    assert world.elite_spawned_count == 1
 
 
 def test_boss_level_creates_boss_at_top_center_with_no_normal_waves():
@@ -65,32 +65,34 @@ def test_boss_level_creates_boss_at_top_center_with_no_normal_waves():
     assert world.quota_remaining == 0
     assert world.spawn_quota == 0
     assert world.max_active == 0
-    assert world.elite_spawned is False
-    assert world.enemies == []
-    assert world.remaining_enemies == 1
+    assert world.elite_target_count == 1
+    assert world.elite_spawned_count == 1
+    assert [enemy.kind for enemy in world.enemies] == ["elite"]
+    assert world.remaining_enemies == 2
 
     world.base.reset_for_level(shield=10_000)
     world.update(config.SPAWN_START_DELAY + 0.01, [])
-    assert world.enemies == []
+    assert [enemy.kind for enemy in world.enemies] == ["elite"]
 
 
 def test_spawn_timer_uses_start_delay_and_level_interval():
     world = wave_world(0)
     starting_quota = world.quota_remaining
+    starting_enemies = len(world.enemies)
 
     world._update_spawning(config.SPAWN_START_DELAY / 2)
-    assert world.enemies == []
+    assert len(world.enemies) == starting_enemies
 
     world._update_spawning(config.SPAWN_START_DELAY / 2)
-    assert len(world.enemies) == 1
+    assert len(world.enemies) == starting_enemies + 1
     assert world.quota_remaining == starting_quota - 1
     assert world.spawn_timer == pytest.approx(config.SPAWN_INTERVAL[0])
 
     world._update_spawning(config.SPAWN_INTERVAL[0] - 0.1)
-    assert len(world.enemies) == 1
+    assert len(world.enemies) == starting_enemies + 1
 
     world._update_spawning(0.2)
-    assert len(world.enemies) == 2
+    assert len(world.enemies) == starting_enemies + 2
     assert world.quota_remaining == starting_quota - 2
 
 
@@ -102,7 +104,7 @@ def test_spawning_stops_at_max_active_and_refills_a_freed_slot():
 
     assert len(world.enemies) == config.MAX_ACTIVE_ENEMIES[0]
     assert world.quota_remaining == (
-        config.ENEMY_QUOTA[0] - config.MAX_ACTIVE_ENEMIES[0]
+        config.ENEMY_QUOTA[0] - config.MAX_ACTIVE_ENEMIES[0] + 1
     )
 
     world._update_spawning(10.0)
@@ -122,7 +124,8 @@ def test_elite_level_spawns_one_elite_that_does_not_consume_quota():
 
     elites = [enemy for enemy in world.enemies if isinstance(enemy, EliteEnemy)]
     assert len(elites) == 1
-    assert world.elite_spawned is True
+    assert world.elite_target_count == config.ELITE_COUNTS[3]
+    assert world.elite_spawned_count == 1
     assert world.quota_remaining == starting_quota
 
     for index in range(10):
@@ -144,7 +147,7 @@ def test_elite_level_spawns_one_elite_that_does_not_consume_quota():
     living = [enemy for enemy in world.enemies if enemy.alive]
     assert len(living) == config.MAX_ACTIVE_ENEMIES[3]
     assert sum(isinstance(enemy, EliteEnemy) for enemy in living) == 0
-    assert world.elite_spawned is True
+    assert world.elite_spawned_count == 1
 
 
 def test_spawns_avoid_steel_and_occupied_spawn_tiles():
@@ -182,6 +185,7 @@ def test_explicit_spawn_on_steel_reroutes_to_a_safe_tile():
 
 def test_all_steel_spawn_points_fall_back_to_a_non_steel_interior_tile():
     world = wave_world(0)
+    world.enemies = []
     world.quota_remaining = 5
     world.spawn_quota = 5
     world.spawn_timer = 0.0
@@ -200,6 +204,7 @@ def test_all_steel_spawn_points_fall_back_to_a_non_steel_interior_tile():
 
 def test_blocked_configured_spawns_fall_back_to_a_legal_tile():
     world = wave_world(0)
+    world.enemies = []
     world.quota_remaining = 5
     world.spawn_quota = 5
     world.spawn_timer = 0.0
@@ -243,6 +248,7 @@ def test_fallback_spawn_rejects_base_tiles_and_entrances():
 
 def test_fallback_spawn_rejects_occupied_tiles_and_delays_spawn():
     world = wave_world(0)
+    world.enemies = []
     for ty in range(1, config.GRID_ROWS - 1):
         for tx in range(1, config.GRID_COLS - 1):
             world.grid[ty][tx] = config.Tile.BRICK
@@ -262,6 +268,7 @@ def test_fallback_spawn_rejects_occupied_tiles_and_delays_spawn():
 
 def test_no_spawn_when_no_non_steel_interior_tile_exists():
     world = wave_world(0)
+    world.enemies = []
     world.quota_remaining = 5
     world.spawn_quota = 5
     world.spawn_timer = 0.0
@@ -301,6 +308,7 @@ def test_remaining_enemies_counts_living_pending_and_the_boss():
     assert world.remaining_enemies == 4
 
     boss_world = wave_world(config.BOSS_LEVEL)
+    boss_world.enemies = []
     assert boss_world.remaining_enemies == 1
     boss_world.boss.take_damage(boss_world.boss.max_hp)
     assert boss_world.remaining_enemies == 0

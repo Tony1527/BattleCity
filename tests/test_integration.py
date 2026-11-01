@@ -58,27 +58,22 @@ def test_all_eight_levels_construct_validate_and_update() -> None:
         assert len(world.grid) == config.GRID_ROWS
         assert all(len(row) == config.GRID_COLS for row in world.grid)
 
+        assert world.elite_target_count == config.ELITE_COUNTS[level_index]
+        assert world.elite_spawned_count == 1
+        assert any(
+            enemy.kind == "elite" and enemy.alive
+            for enemy in world.enemies
+        )
+
         if level_index == config.BOSS_LEVEL:
             assert world.boss is not None
             assert world.boss.hp == config.BOSS_HP
             assert world.quota_remaining == 0
             assert world.spawn_quota == 0
-            assert world.elite_spawned is False
         else:
             assert world.boss is None
             assert world.quota_remaining == config.ENEMY_QUOTA[level_index]
             assert world.spawn_quota == config.ENEMY_QUOTA[level_index]
-            if level_index in config.ELITE_LEVELS:
-                assert world.elite_spawned is True
-                assert any(
-                    enemy.kind == "elite" and enemy.alive
-                    for enemy in world.enemies
-                )
-            else:
-                assert world.elite_spawned is False
-                assert not any(
-                    enemy.kind == "elite" for enemy in world.enemies
-                )
 
         inputs = [PlayerInput() for _ in world.players]
         for _ in range(120):

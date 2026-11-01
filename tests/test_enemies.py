@@ -116,11 +116,45 @@ def test_make_enemy_returns_elite_with_gunner_stats_and_elite_timers():
 
     assert isinstance(elite, enemies.EliteEnemy)
     assert elite.kind == "elite"
-    assert elite.max_hp == config.ENEMY_SPECS["gunner"].hp
+    assert elite.max_hp == config.ELITE_HP_BASE
     assert elite.speed == config.ENEMY_SPECS["gunner"].speed
-    assert elite.shield == config.ELITE_SHIELD
+    assert elite.shield == config.ELITE_SHIELD_BASE
     assert elite.shield_timer == pytest.approx(config.ELITE_SHIELD_REGEN)
     assert elite.summon_timer == pytest.approx(config.ELITE_SUMMON_INTERVAL)
+
+
+def test_make_enemy_scales_elite_health_and_shield_per_level():
+    elite = enemies.make_enemy(
+        "elite",
+        (4, 5),
+        elite_level=3,
+        elite_hp_mult=1.5,
+        elite_shield_mult=1.5,
+    )
+
+    assert elite.max_hp == 6
+    assert elite.hp == 6
+    assert elite.max_shield == 23
+    assert elite.shield == 23
+
+
+def test_make_enemy_uses_the_supplied_elite_gunner_spec():
+    spec = config.ENEMY_SPECS["gunner"]
+    scaled = config.EnemySpec(
+        spec.kind,
+        spec.hp,
+        spec.speed,
+        spec.fire_interval * 0.8,
+        spec.bullet_speed,
+        spec.bullet_damage,
+        spec.attack_range * 1.15,
+        spec.score,
+    )
+    elite = enemies.make_enemy("elite", (4, 5), spec=scaled)
+
+    assert elite.spec is scaled
+    assert elite.spec.fire_interval == pytest.approx(1.52)
+    assert elite.spec.attack_range == pytest.approx(441.6)
 
 
 def test_take_damage_kills_and_sets_alive_false():
@@ -145,7 +179,7 @@ def test_elite_shield_absorbs_damage_before_health():
     world = FakeWorld()
 
     assert elite.take_damage(5, world) is False
-    assert elite.shield == config.ELITE_SHIELD - 5
+    assert elite.shield == config.ELITE_SHIELD_BASE - 5
     assert elite.hp == elite.max_hp
 
     assert elite.take_damage(20, world) is True
@@ -157,25 +191,25 @@ def test_elite_shield_absorbs_damage_before_health():
 def test_elite_regenerates_shield_on_timer_without_exceeding_cap():
     elite = enemies.make_enemy("elite", (4, 5))
     world = FakeWorld()
-    elite.shield = config.ELITE_SHIELD - 1
+    elite.shield = config.ELITE_SHIELD_BASE - 1
     elite.shield_timer = config.ELITE_SHIELD_REGEN
 
     elite.update(config.ELITE_SHIELD_REGEN, world)
-    assert elite.shield == config.ELITE_SHIELD
+    assert elite.shield == config.ELITE_SHIELD_BASE
 
     elite.shield_timer = config.ELITE_SHIELD_REGEN
     elite.update(config.ELITE_SHIELD_REGEN * 10, world)
-    assert elite.shield == config.ELITE_SHIELD
+    assert elite.shield == config.ELITE_SHIELD_BASE
 
 
-def test_elite_summons_two_trackers_and_never_more_than_cap_alive():
+def test_elite_summons_one_tracker_and_never_more_than_cap_alive():
     elite = enemies.make_enemy("elite", (4, 5))
     world = FakeWorld()
 
     elite.update(config.ELITE_SUMMON_INTERVAL, world)
 
     assert len(world.spawns) == config.ELITE_MAX_SUMMONS
-    assert [kind for kind, _ in world.spawns] == ["tracker", "tracker"]
+    assert [kind for kind, _ in world.spawns] == ["tracker"]
     assert all(enemy.alive for enemy in world.spawned)
 
     elite.update(config.ELITE_SUMMON_INTERVAL, world)
