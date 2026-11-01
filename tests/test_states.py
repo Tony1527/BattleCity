@@ -194,7 +194,7 @@ def test_eliminated_player_returns_alive_next_level_with_reset_lives(game):
     assert game.world.shared_lives == expected_lives
 
 
-def test_loss_enters_gameover_and_enter_starts_fresh_run(game):
+def test_loss_enters_gameover_and_enter_retries_current_level(game):
     start_playing(game)
     game.world.apply_upgrade(0, "heavy_rounds")
     old_world = game.world
@@ -203,7 +203,7 @@ def test_loss_enters_gameover_and_enter_starts_fresh_run(game):
     game.update(1 / 60)
 
     assert game.state == "gameover"
-    assert game.reason
+    assert game.reason == "both_eliminated"
 
     game.handle_event(key_event(config.CONFIRM_KEY))
 
@@ -211,9 +211,9 @@ def test_loss_enters_gameover_and_enter_starts_fresh_run(game):
     assert game.level_index == 0
     assert game.world is not old_world
     assert game.world.level_index == 0
-    assert game.world.upgrade_levels == [{}, {}]
+    assert game.world.upgrade_levels[0]["heavy_rounds"] == 1
     assert game.world.player_stats[0].bullet_damage == (
-        config.PlayerStats().bullet_damage
+        config.PlayerStats().bullet_damage + 1
     )
     assert game.world.player_stats[1].max_hp == config.PlayerStats().max_hp
 

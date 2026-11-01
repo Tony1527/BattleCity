@@ -47,6 +47,9 @@ class World:
         player_stats: list[config.PlayerStats] | None = None,
         upgrade_levels: list[dict[str, int]] | None = None,
         difficulty: str = "normal",
+        shared_lives: int | None = None,
+        base_hp: int | None = None,
+        base_shield: int | None = None,
     ) -> None:
         self.level_index = int(level_index)
         self.difficulty = get_profile(difficulty)
@@ -99,12 +102,21 @@ class World:
         self.base = Base(
             config.BASE_TILES, max_hp=self.difficulty.base_hp
         )
-        self.shared_lives = config.SHARED_LIVES + sum(
-            stats.extra_lives for stats in self.player_stats
+        self.shared_lives = (
+            config.SHARED_LIVES
+            + sum(stats.extra_lives for stats in self.player_stats)
+            if shared_lives is None
+            else max(0, int(shared_lives))
         )
-        self.base.reset_for_level(
+        starting_shield = (
             sum(stats.base_shield for stats in self.player_stats)
+            if base_shield is None
+            else max(0, int(base_shield))
         )
+        self.base.reset_for_level(starting_shield)
+        if base_hp is not None:
+            self.base.hp = max(0, min(int(base_hp), self.base.max_hp))
+            self.base.alive = self.base.hp > 0
 
         self.enemies: list[Enemy] = []
         self.bullets: list[Bullet] = []

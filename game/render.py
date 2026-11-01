@@ -1521,7 +1521,7 @@ class Renderer:
         world.effects.draw(self.screen, offset)
         self._draw_hud(world)
 
-    def draw_title(self, t: float) -> None:
+    def draw_title(self, t: float, difficulty: str = "normal") -> None:
         self.screen.blit(self._background, (0, 0))
         self._dim(148)
         cx, cy = self.width // 2, 220
@@ -1588,6 +1588,26 @@ class Renderer:
             self.font_s,
             (126, 164, 192),
             (cx, cy + 204),
+            align="center",
+        )
+        difficulty_label = str(difficulty).upper()
+        difficulty_color = (
+            config.ENEMY_RED
+            if str(difficulty).lower() == "hell"
+            else config.P1_BLUE
+        )
+        self._text(
+            f"DIFFICULTY  < {difficulty_label} >",
+            self.font_m,
+            difficulty_color,
+            (cx, cy + 252),
+            align="center",
+        )
+        self._text(
+            "LEFT / RIGHT TO CHANGE",
+            self.font_s,
+            (126, 164, 192),
+            (cx, cy + 292),
             align="center",
         )
 

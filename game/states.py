@@ -6,8 +6,10 @@ import pygame
 
 import config
 from game.audio import Audio
+from game.difficulty import PROFILES
 from game.input import choice_from_event, read_player_inputs
 from game.render import Renderer
+from game.run import RunState
 from game.upgrades import Upgrade, roll_upgrades
 from game.world import World
 
@@ -21,9 +23,13 @@ class Game:
         screen: pygame.Surface,
         seed: int | None = None,
         audio: Audio | None = None,
+        difficulty: str = "normal",
+        language: str = "zh",
     ) -> None:
         self.screen = screen
         self.seed = seed
+        self.difficulty = difficulty
+        self.language = language
         self._run_seed = (
             int(seed) if seed is not None else random.randrange(1 << 31)
         )
@@ -61,13 +67,60 @@ class Game:
         level_index: int,
         stats: list[config.PlayerStats],
         levels: list[dict[str, int]],
+        *,
+        shared_lives: int | None = None,
+        base_hp: int | None = None,
+        base_shield: int | None = None,
+        difficulty: str | None = None,
     ) -> World:
         return World(
             level_index,
             seed=self._world_seed(level_index),
             player_stats=stats,
             upgrade_levels=levels,
+            difficulty=self.difficulty if difficulty is None else difficulty,
+            shared_lives=shared_lives,
+            base_hp=base_hp,
+            base_shield=base_shield,
         )
+
+    def _capture_run_state(self) -> RunState:
+        world = self.world
+        return RunState(
+            run_seed=self._run_seed,
+            difficulty=self.difficulty,
+            language=self.language,
+            level_index=world.level_index,
+            player_stats=[player.stats for player in world.players],
+            upgrade_levels=[
+                dict(levels) for levels in world.upgrade_levels
+            ],
+            shared_lives=world.shared_lives,
+        )
+
+    def _retry_level(self) -> None:
+        state = self._capture_run_state()
+        base = self.world.base
+        base_hp = base.hp if base.alive else None
+        base_shield = base.shield if base.alive else None
+
+        self.level_index = state.level_index
+        self.world = self._make_world(
+            state.level_index,
+            state.player_stats,
+            state.upgrade_levels,
+            shared_lives=state.shared_lives,
+            base_hp=base_hp,
+            base_shield=base_shield,
+            difficulty=state.difficulty,
+        )
+        self.state = "playing"
+        self.intro_timer = INTRO_DURATION
+        self.offers = [[], []]
+        self.chooser = 0
+        self._chooser_queue = []
+        self.reason = ""
+        self._skill_pressed.clear()
 
     def _new_run(self) -> None:
         self._run_seed = (
@@ -158,12 +211,13 @@ class Game:
 
     def _loss_reason(self) -> str:
         if not self.world.base.alive:
-            return "The base was destroyed."
-        if self.world.players and all(
-            player.eliminated for player in self.world.players
-        ):
-            return "Both tanks were eliminated."
-        return "The armory held."
+            return "base_destroyed"
+        return "both_eliminated"
+
+    def _change_difficulty(self, step: int) -> None:
+        keys = list(PROFILES)
+        index = keys.index(self.difficulty) if self.difficulty in keys else 0
+        self.difficulty = keys[(index + step) % len(keys)]
 
     def _sync_status(self) -> None:
         status = self.world.status
@@ -222,11 +276,18 @@ class Game:
                 self._skill_pressed.clear()
             elif self.state == "paused":
                 self.state = "playing"
+            elif self.state == "gameover":
+                self.state = "title"
+                self._skill_pressed.clear()
             return
 
         if self.state == "title":
             if key == config.CONFIRM_KEY:
                 self.state = "controls"
+            elif key == pygame.K_LEFT:
+                self._change_difficulty(-1)
+            elif key == pygame.K_RIGHT:
+                self._change_difficulty(1)
         elif self.state == "controls":
             if key == config.CONFIRM_KEY:
                 self._start_new_run()
@@ -234,7 +295,10 @@ class Game:
             self._register_skill(key)
         elif self.state == "upgrade":
             self._choose_upgrade(event)
-        elif self.state in ("gameover", "victory"):
+        elif self.state == "gameover":
+            if key == config.CONFIRM_KEY:
+                self._retry_level()
+        elif self.state == "victory":
             if key == config.CONFIRM_KEY:
                 self._start_new_run()
 
@@ -256,7 +320,7 @@ class Game:
 
     def draw(self) -> None:
         if self.state == "title":
-            self.renderer.draw_title(self._time)
+            self.renderer.draw_title(self._time, self.difficulty)
         elif self.state == "controls":
             self.renderer.draw_controls()
         elif self.state == "playing":
