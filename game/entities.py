@@ -56,6 +56,7 @@ class Bullet:
         owner_id: int = -1,
         friendly: bool = True,
         pierce: bool = False,
+        velocity: pygame.Vector2 | tuple[float, float] | None = None,
     ):
         self.pos = pygame.Vector2(pos)
         self.prev_pos = pygame.Vector2(pos)
@@ -65,6 +66,9 @@ class Bullet:
         self.owner_id = owner_id
         self.friendly = friendly
         self.pierce = pierce
+        self.velocity = (
+            pygame.Vector2(velocity) if velocity is not None else None
+        )
         self.alive = True
 
     @property
@@ -78,6 +82,9 @@ class Bullet:
 
     def update(self, dt: float) -> None:
         self.prev_pos = pygame.Vector2(self.pos)
+        if self.velocity is not None:
+            self.pos += self.velocity * dt
+            return
         dx, dy = self.direction.vector
         self.pos += pygame.Vector2(dx, dy) * self.speed * dt
 

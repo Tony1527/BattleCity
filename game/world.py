@@ -6,6 +6,7 @@ import random
 import pygame
 
 import config
+from game.boss import Boss
 from game.effects import Effects
 from game.enemies import Enemy, make_enemy
 from game.entities import Base, Bullet, Player
@@ -19,6 +20,12 @@ from game.upgrades import apply_upgrade as _apply_upgrade
 _BULLET_SUBSTEP = 6.0
 _MOVE_SUBSTEP = 1.0
 _EPSILON = 1e-9
+
+
+def _level_value(values, level_index: int, default=0):
+    if 0 <= level_index < len(values):
+        return values[level_index]
+    return default
 
 
 class World:
@@ -38,6 +45,10 @@ class World:
         self.status = "playing"
         self.elapsed = 0.0
         self.quota_remaining = 0
+        self.spawn_quota = 0
+        self.spawn_timer = config.SPAWN_START_DELAY
+        self.max_active = 0
+        self.elite_spawned = False
         self.playfield_rect = pygame.Rect(config.PLAYFIELD_RECT)
         self.base_entrances = config.BASE_ENTRANCES
 
@@ -84,8 +95,15 @@ class World:
         self.bullets: list[Bullet] = []
         self.grenades: list = []
         self.lasers: list = []
-        self.boss = None
+        self.boss: Boss | None = None
         self.effects = Effects()
+        self._start_level()
+
+    @property
+    def remaining_enemies(self) -> int:
+        living = sum(1 for enemy in self.enemies if enemy.alive)
+        boss_alive = 1 if self.boss is not None and self.boss.alive else 0
+        return living + self.quota_remaining + boss_alive
 
     def point_to_tile(
         self, pos: tuple[float, float] | pygame.Vector2
@@ -124,6 +142,34 @@ class World:
             return self.grid[ty][tx] != config.Tile.STEEL
 
         return astar(start, goal, passable)
+
+    def line_of_sight(
+        self,
+        a: tuple[float, float] | pygame.Vector2,
+        b: tuple[float, float] | pygame.Vector2,
+    ) -> bool:
+        start = pygame.Vector2(a)
+        end = pygame.Vector2(b)
+        distance = start.distance_to(end)
+        if distance <= _EPSILON:
+            return True
+
+        start_tile = self.point_to_tile(start)
+        end_tile = self.point_to_tile(end)
+        steps = max(1, math.ceil(distance / (config.TILE / 4)))
+        for step in range(1, steps):
+            point = start.lerp(end, step / steps)
+            tile = self.point_to_tile(point)
+            if not in_bounds(*tile):
+                return False
+            if tile in (start_tile, end_tile):
+                continue
+            if self.grid[tile[1]][tile[0]] in (
+                config.Tile.BRICK,
+                config.Tile.STEEL,
+            ):
+                return False
+        return True
 
     def move_entity(
         self,
@@ -185,6 +231,7 @@ class World:
         self._update_enemies(dt)
         self.enemies = [enemy for enemy in self.enemies if enemy.alive]
         self._check_defeat()
+        self._check_progression()
 
     def damage_player(self, player: Player, amount: int) -> None:
         if player is None or not player.alive or amount <= 0:
@@ -242,16 +289,171 @@ class World:
         self.bullets.append(bullet)
         return bullet
 
+    def enemy_fire_at(
+        self,
+        origin: tuple[float, float] | pygame.Vector2,
+        target: tuple[float, float] | pygame.Vector2,
+        speed: float,
+        damage: int,
+    ) -> Bullet:
+        origin_v = pygame.Vector2(origin)
+        target_v = pygame.Vector2(target)
+        delta = target_v - origin_v
+        if delta.length_squared() > 0.0:
+            direction = config.Direction.from_vector(delta.x, delta.y)
+            velocity = delta.normalize() * speed
+        else:
+            direction = config.Direction.DOWN
+            velocity = pygame.Vector2(0.0, 0.0)
+
+        bullet = Bullet(
+            origin_v,
+            direction,
+            speed=speed,
+            damage=damage,
+            owner_id=-1,
+            friendly=False,
+            velocity=velocity,
+        )
+        self.bullets.append(bullet)
+        return bullet
+
+    def enemy_radial_burst(
+        self,
+        origin: tuple[float, float] | pygame.Vector2,
+        count: int,
+        speed: float,
+        damage: int,
+    ) -> list[Bullet]:
+        origin_v = pygame.Vector2(origin)
+        bullets: list[Bullet] = []
+        if count <= 0:
+            return bullets
+
+        for index in range(count):
+            angle = math.tau * index / count
+            velocity = pygame.Vector2(
+                math.cos(angle) * speed, math.sin(angle) * speed
+            )
+            if velocity.length_squared() > 0.0:
+                direction = config.Direction.from_vector(
+                    velocity.x, velocity.y
+                )
+            else:
+                direction = config.Direction.UP
+            bullet = Bullet(
+                origin_v,
+                direction,
+                speed=speed,
+                damage=damage,
+                owner_id=-1,
+                friendly=False,
+                velocity=velocity,
+            )
+            self.bullets.append(bullet)
+            bullets.append(bullet)
+        return bullets
+
+    def boss_laser(
+        self,
+        origin: tuple[float, float] | pygame.Vector2,
+        direction: config.Direction,
+    ) -> None:
+        direction = config.Direction(direction)
+        origin_v = pygame.Vector2(origin)
+        max_range = math.hypot(
+            config.PLAYFIELD_WIDTH, config.PLAYFIELD_HEIGHT
+        )
+        beam = compute_laser(origin_v, direction, max_range, self.grid)
+        self.lasers.append(beam)
+
+        if beam.brick_tile is not None:
+            self.destroy_brick(*beam.brick_tile)
+
+        for player in self.players:
+            if not player.alive or player.eliminated:
+                continue
+            if not point_near_segment(
+                player.center,
+                beam.origin,
+                beam.end,
+                config.LASER_HIT_TOLERANCE,
+            ):
+                continue
+            self.damage_player(player, config.BOSS_BULLET_DAMAGE)
+
+        if self.base.alive and point_near_segment(
+            self.base.center,
+            beam.origin,
+            beam.end,
+            config.TILE,
+        ):
+            self.damage_base(config.BOSS_BULLET_DAMAGE)
+
+        self.effects.burst(beam.end, config.HOLO_WHITE, count=8)
+        self.effects.shake(3.0)
+
     def spawn_enemy(
         self,
         kind: str,
         tile: tuple[int, int] | None = None,
     ) -> Enemy:
+        if tile is not None and (
+            self.is_steel(*tile) or self._tile_occupied(*tile)
+        ):
+            tile = None
         if tile is None:
-            tile = self.random.choice(config.ENEMY_SPAWNS)
+            tile = self._choose_spawn_tile()
+        if tile is None:
+            tile = self._fallback_spawn_tile()
         enemy = make_enemy(kind, tile)
         self.enemies.append(enemy)
         return enemy
+
+    def _fallback_spawn_tile(self) -> tuple[int, int]:
+        for ty in range(config.GRID_ROWS):
+            for tx in range(config.GRID_COLS):
+                if self.is_steel(tx, ty):
+                    continue
+                if self._tile_occupied(tx, ty):
+                    continue
+                return (tx, ty)
+        return self.random.choice(config.ENEMY_SPAWNS)
+
+    def _tile_occupied(self, tx: int, ty: int) -> bool:
+        tile = tile_rect(tx, ty)
+        for enemy in self.enemies:
+            if enemy.alive and enemy.rect.colliderect(tile):
+                return True
+        if (
+            self.boss is not None
+            and self.boss.alive
+            and self.boss.rect.colliderect(tile)
+        ):
+            return True
+        for player in self.players:
+            if (
+                player.alive
+                and not player.eliminated
+                and player.rect.colliderect(tile)
+            ):
+                return True
+        return False
+
+    def _choose_spawn_tile(self) -> tuple[int, int] | None:
+        spawns = list(config.ENEMY_SPAWNS)
+        if not spawns:
+            return None
+
+        start = self.random.randrange(len(spawns))
+        for offset in range(len(spawns)):
+            tile = spawns[(start + offset) % len(spawns)]
+            if self.is_steel(*tile):
+                continue
+            if self._tile_occupied(*tile):
+                continue
+            return tile
+        return None
 
     def demolisher_blast(self, enemy: Enemy) -> None:
         center = pygame.Vector2(enemy.pos)
@@ -347,6 +549,7 @@ class World:
                 )
 
         self.effects.shake(2.0)
+        self._check_progression()
         return True
 
     def resolve_grenade(self, grenade: Grenade) -> None:
@@ -398,6 +601,7 @@ class World:
             self.effects.burst(point, config.ENEMY_ORANGE, count=18)
 
         self.effects.shake(5.0)
+        self._check_progression()
 
     def apply_upgrade(self, player_id: int, upgrade_id: str) -> bool:
         if not 0 <= player_id < len(self.players):
@@ -435,8 +639,96 @@ class World:
             laser for laser in self.lasers if laser.life > 0.0
         ]
 
+    def _start_level(self) -> None:
+        if self.level_index == config.BOSS_LEVEL:
+            self.boss = Boss()
+            self.quota_remaining = 0
+            self.spawn_quota = 0
+            self.max_active = 0
+            self.spawn_timer = config.SPAWN_START_DELAY
+            return
+
+        quota = _level_value(config.ENEMY_QUOTA, self.level_index)
+        self.quota_remaining = quota
+        self.spawn_quota = quota
+        self.max_active = _level_value(
+            config.MAX_ACTIVE_ENEMIES, self.level_index
+        )
+        self.spawn_timer = config.SPAWN_START_DELAY
+
+        if self.level_index in config.ELITE_LEVELS:
+            self._spawn_elite()
+
+    def _spawn_elite(self) -> Enemy | None:
+        if self.elite_spawned:
+            return None
+        tile = self._choose_spawn_tile()
+        if tile is None:
+            return None
+        enemy = self.spawn_enemy("elite", tile)
+        self.elite_spawned = True
+        return enemy
+
+    def _active_enemy_count(self) -> int:
+        return sum(1 for enemy in self.enemies if enemy.alive)
+
+    def _spawn_interval(self) -> float:
+        return _level_value(config.SPAWN_INTERVAL, self.level_index, 0.0)
+
+    def _choose_enemy_kind(self) -> str:
+        if self.level_index <= 1:
+            pool = ("tracker", "tracker", "tracker", "gunner")
+        elif self.level_index <= 4:
+            pool = ("tracker", "tracker", "gunner", "demolisher")
+        else:
+            pool = ("tracker", "gunner", "gunner", "demolisher")
+        return self.random.choice(pool)
+
     def _update_spawning(self, dt: float) -> None:
-        return None
+        if self.status != "playing" or self.boss is not None:
+            return
+        if self.quota_remaining <= 0:
+            return
+
+        self.spawn_timer -= dt
+        if self.spawn_timer > 0.0:
+            return
+        if self._active_enemy_count() >= self.max_active:
+            return
+
+        tile = self._choose_spawn_tile()
+        if tile is None:
+            return
+
+        self.spawn_enemy(self._choose_enemy_kind(), tile)
+        self.quota_remaining -= 1
+        self.spawn_quota = self.quota_remaining
+        self.spawn_timer = self._spawn_interval()
+
+    def _on_boss_dead(self) -> None:
+        if self.status != "playing":
+            return
+        self.status = "victory"
+        if self.boss is not None:
+            self.effects.burst(self.boss.center, config.ENEMY_RED, count=48)
+            self.effects.burst(
+                self.boss.center, config.HOLO_WHITE, count=24
+            )
+            self.effects.shake(10.0)
+
+    def _check_progression(self) -> None:
+        if self.status != "playing":
+            return
+
+        if self.level_index == config.BOSS_LEVEL:
+            if self.boss is not None and not self.boss.alive:
+                self._on_boss_dead()
+            return
+
+        if self.quota_remaining <= 0 and not any(
+            enemy.alive for enemy in self.enemies
+        ):
+            self.status = "cleared"
 
     def _entity_speed(self, entity) -> float:
         speed = getattr(entity, "speed", None)
@@ -564,6 +856,8 @@ class World:
         for enemy in list(self.enemies):
             if enemy.alive:
                 enemy.update(dt, self)
+        if self.boss is not None and self.boss.alive:
+            self.boss.update(dt, self)
 
     def _update_bullets(self, dt: float) -> None:
         survivors = []
@@ -577,9 +871,16 @@ class World:
 
     def _advance_bullet(self, bullet: Bullet, dt: float) -> None:
         bullet.prev_pos = pygame.Vector2(bullet.pos)
-        dx, dy = bullet.direction.vector
-        unit = pygame.Vector2(dx, dy)
-        travel = max(0.0, bullet.speed * dt)
+        if bullet.velocity is not None:
+            travel = max(0.0, bullet.velocity.length() * dt)
+            if travel > 0.0:
+                unit = bullet.velocity.normalize()
+            else:
+                unit = pygame.Vector2(0.0, 0.0)
+        else:
+            dx, dy = bullet.direction.vector
+            unit = pygame.Vector2(dx, dy)
+            travel = max(0.0, bullet.speed * dt)
         steps = max(1, math.ceil(travel / _BULLET_SUBSTEP))
         step = travel / steps
 
@@ -592,6 +893,8 @@ class World:
             if self._bullet_hits_base(bullet):
                 return
             if self._bullet_hits_enemy(bullet):
+                return
+            if self._bullet_hits_boss(bullet):
                 return
 
     def _bullet_hits_wall(self, bullet: Bullet) -> bool:
@@ -658,6 +961,28 @@ class World:
                 bullet.alive = False
             return True
         return False
+
+    def _bullet_hits_boss(self, bullet: Bullet) -> bool:
+        if (
+            not bullet.friendly
+            or self.boss is None
+            or not self.boss.alive
+        ):
+            return False
+        if not bullet.rect.colliderect(self.boss.rect):
+            return False
+
+        destroyed = self.boss.take_damage(bullet.damage)
+        if destroyed:
+            self._on_boss_dead()
+        else:
+            self.effects.burst(
+                self.boss.center, config.ENEMY_ORANGE, count=5
+            )
+            self.effects.shake(1.5)
+        if not bullet.pierce:
+            bullet.alive = False
+        return True
 
     def _check_defeat(self) -> None:
         if self.status != "playing":
