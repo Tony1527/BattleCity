@@ -8,6 +8,11 @@ from config import (
     BASE_ENTRANCES,
     BASE_TILES,
     BRICK_CHANCE,
+    BRIDGE_COUNT,
+    BRIDGE_MAX_CENTER,
+    BRIDGE_MIN_CENTER,
+    BRIDGE_MIN_SPACING,
+    BRIDGE_WIDTH,
     CORRIDOR_BANDS,
     ENEMY_SPAWNS,
     GENERATION_RETRIES,
@@ -17,6 +22,10 @@ from config import (
     MIN_BASE_ENTRANCE_DIRECTIONS,
     MIN_ROUTES,
     PLAYER_SPAWNS,
+    RIVER_BANDS,
+    RIVER_ROW_GAP,
+    RIVER_ROW_MAX,
+    RIVER_ROW_MIN,
     SPAWN_SAFE_RADIUS,
     STEEL_CHANCE,
     Direction,
@@ -30,6 +39,7 @@ _CORRIDOR_BRICK_CHANCE = 0.08
 _MAX_CORRIDOR_BRICKS = 2
 _DFS_ATTEMPTS = 40
 _DFS_DEPTH_LIMIT = 200
+_BRIDGE_CENTER_SLOTS = ((3, 4), (11, 12), (19, 20))
 
 
 @dataclass
@@ -45,7 +55,7 @@ def is_passable_for_routes(level: Level, tx: int, ty: int) -> bool:
         return False
     if ty >= len(level.grid) or tx >= len(level.grid[ty]):
         return False
-    return level.grid[ty][tx] != Tile.STEEL
+    return level.grid[ty][tx] not in (Tile.STEEL, Tile.RIVER)
 
 
 def _blank_grid() -> list[list[Tile]]:
@@ -78,7 +88,84 @@ def _corridor_band(tx: int) -> int | None:
     return None
 
 
-def _build_grid(rng: random.Random) -> list[list[Tile]]:
+def _choose_river_rows(
+    rng: random.Random, count: int
+) -> list[int]:
+    rows: list[int] = []
+    limit = max(0, int(count))
+    for _ in range(limit):
+        options = [
+            row
+            for row in range(RIVER_ROW_MIN, RIVER_ROW_MAX + 1)
+            if all(abs(row - chosen) >= RIVER_ROW_GAP for chosen in rows)
+        ]
+        if not options:
+            break
+        rows.append(rng.choice(options))
+    return rows
+
+
+def _choose_bridge_centers(
+    rng: random.Random, count: int
+) -> list[int]:
+    centers: list[int] = []
+    for slot in _BRIDGE_CENTER_SLOTS[: max(0, int(count))]:
+        candidate = rng.choice(slot)
+        if all(
+            abs(candidate - chosen) >= BRIDGE_MIN_SPACING
+            for chosen in centers
+        ):
+            centers.append(candidate)
+
+    while len(centers) < count:
+        options = [
+            center
+            for center in range(BRIDGE_MIN_CENTER, BRIDGE_MAX_CENTER + 1)
+            if all(
+                abs(center - chosen) >= BRIDGE_MIN_SPACING
+                for chosen in centers
+            )
+        ]
+        if not options:
+            break
+        centers.append(rng.choice(options))
+    return centers
+
+
+def _carve_river(
+    grid: list[list[Tile]],
+    row: int,
+    rng: random.Random,
+) -> None:
+    for tx in range(1, GRID_COLS - 1):
+        grid[row][tx] = Tile.RIVER
+
+    width = max(1, int(BRIDGE_WIDTH))
+    for center in _choose_bridge_centers(rng, BRIDGE_COUNT):
+        start = center - width // 2
+        start = max(1, min(start, GRID_COLS - 1 - width))
+        for tx in range(start, start + width):
+            grid[row][tx] = Tile.BRIDGE
+
+
+def _carve_rivers(
+    grid: list[list[Tile]],
+    rng: random.Random,
+    count: int,
+) -> None:
+    for row in _choose_river_rows(rng, count):
+        _carve_river(grid, row, rng)
+
+
+def _river_count(level_index: int) -> int:
+    if 0 <= level_index < len(RIVER_BANDS):
+        return max(0, int(RIVER_BANDS[level_index]))
+    return 0
+
+
+def _build_grid(
+    rng: random.Random, river_count: int = 0
+) -> list[list[Tile]]:
     grid = _blank_grid()
     _add_steel_border(grid)
     protected = _protected_cells()
@@ -105,6 +192,9 @@ def _build_grid(rng: random.Random) -> list[list[Tile]]:
 
     for tx, ty in protected:
         grid[ty][tx] = Tile.EMPTY
+
+    if river_count > 0:
+        _carve_rivers(grid, rng, river_count)
 
     return grid
 
@@ -271,22 +361,23 @@ def validate_level(level: Level) -> bool:
     return len(directions) >= MIN_BASE_ENTRANCE_DIRECTIONS
 
 
-def generate_level(seed: int) -> Level:
+def generate_level(seed: int, level_index: int = 0) -> Level:
+    river_count = _river_count(level_index)
     seed_rng = random.Random(seed)
     for _ in range(GENERATION_RETRIES):
         attempt_seed = seed_rng.randrange(1 << 31)
         level = Level(
-            grid=_build_grid(random.Random(attempt_seed)),
+            grid=_build_grid(random.Random(attempt_seed), river_count),
             spawns=ENEMY_SPAWNS,
             base_tiles=BASE_TILES,
             seed=seed,
         )
         if validate_level(level):
             return level
-    return fallback_level()
+    return fallback_level(river_count)
 
 
-def fallback_level() -> Level:
+def fallback_level(river_count: int = 1) -> Level:
     grid = _blank_grid()
     _add_steel_border(grid)
 
@@ -322,6 +413,9 @@ def fallback_level() -> Level:
 
     for tx, ty in _protected_cells():
         grid[ty][tx] = Tile.EMPTY
+
+    if river_count > 0:
+        _carve_rivers(grid, random.Random(0), river_count)
 
     return Level(
         grid=grid,

@@ -158,6 +158,15 @@ def test_tiles_are_int_enum():
     assert config.Tile.EMPTY.value == 0
     assert config.Tile.BRICK.value == 1
     assert config.Tile.STEEL.value == 2
+    assert config.Tile.RIVER.value == 3
+    assert config.Tile.BRIDGE.value == 4
+
+
+def test_river_and_bridge_constants_match_spec():
+    assert config.RIVER_BANDS == (0, 1, 1, 1, 2, 2, 2, 0)
+    assert len(config.RIVER_BANDS) == config.LEVEL_COUNT
+    assert config.BRIDGE_COUNT == 3
+    assert config.BRIDGE_WIDTH == 2
 
 
 def test_keymap_defaults():

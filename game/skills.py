@@ -163,7 +163,7 @@ def compute_laser(
         if not in_bounds(tile_x, tile_y):
             break
         tile = grid[tile_y][tile_x]
-        if tile != config.Tile.EMPTY:
+        if tile in (config.Tile.BRICK, config.Tile.STEEL):
             if tile == config.Tile.BRICK:
                 brick_tile = (tile_x, tile_y)
             distance = max(

@@ -55,7 +55,7 @@ class World:
         self.difficulty = get_profile(difficulty)
         self.seed = self.level_index if seed is None else int(seed)
         self.random = random.Random(self.seed)
-        self.level: Level = generate_level(self.seed)
+        self.level: Level = generate_level(self.seed, self.level_index)
         self.grid: list[list[config.Tile]] = self.level.grid
 
         self.status = "playing"
@@ -171,7 +171,10 @@ class World:
         def passable(tx: int, ty: int) -> bool:
             if not in_bounds(tx, ty):
                 return False
-            return self.grid[ty][tx] != config.Tile.STEEL
+            return self.grid[ty][tx] not in (
+                config.Tile.STEEL,
+                config.Tile.RIVER,
+            )
 
         return astar(start, goal, passable)
 
@@ -952,6 +955,7 @@ class World:
                 if self.grid[ty][tx] not in (
                     config.Tile.BRICK,
                     config.Tile.STEEL,
+                    config.Tile.RIVER,
                 ):
                     continue
                 if rect.colliderect(tile_rect(tx, ty)):

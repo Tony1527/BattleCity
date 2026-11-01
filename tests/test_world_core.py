@@ -7,6 +7,7 @@ from game.entities import Bullet
 from game.enemies import make_enemy
 from game.geometry import tile_center, tile_rect
 from game.input import PlayerInput
+from game.skills import Grenade
 from game.world import World
 
 
@@ -152,6 +153,25 @@ def test_move_entity_is_blocked_by_brick_and_steel_but_slides_on_free_axis():
         assert moved_up
         assert player.pos.x == blocked_x
         assert player.pos.y < tile_center(4, 5).y
+
+
+def test_move_entity_is_blocked_by_river_but_crosses_bridge():
+    world = open_world()
+    player = world.players[0]
+    player.pos = tile_center(4, 5)
+    world.grid[5][5] = config.Tile.RIVER
+
+    world.move_entity(player, config.Direction.RIGHT, 1.0)
+
+    assert player.rect.right <= tile_rect(5, 5).left
+
+    world.grid[5][5] = config.Tile.BRIDGE
+    start_x = player.pos.x
+
+    moved = world.move_entity(player, config.Direction.RIGHT, 1.0)
+
+    assert moved
+    assert player.pos.x > start_x
 
 
 def test_move_entity_stays_inside_the_playfield():
@@ -573,6 +593,38 @@ def test_find_path_treats_brick_as_passable_and_steel_as_blocked():
     assert (5, 5) not in path
     assert world.is_steel(5, 5)
     assert not world.is_brick(5, 5)
+
+
+def test_find_path_blocks_river_and_allows_bridge():
+    world = open_world()
+    world.grid[5][5] = config.Tile.RIVER
+
+    path = world.find_path((4, 5), (6, 5))
+
+    assert path is not None
+    assert (5, 5) not in path
+
+    world.grid[5][5] = config.Tile.BRIDGE
+
+    path = world.find_path((4, 5), (6, 5))
+
+    assert path == [(4, 5), (5, 5), (6, 5)]
+
+
+def test_grenade_destroys_bricks_but_not_river_or_bridge():
+    world = open_world()
+    target = tile_center(5, 5)
+    world.grid[5][5] = config.Tile.BRICK
+    world.grid[5][6] = config.Tile.RIVER
+    world.grid[4][5] = config.Tile.BRIDGE
+
+    grenade = Grenade(target, config.Direction.RIGHT)
+    grenade.target = pygame.Vector2(target)
+    world.resolve_grenade(grenade)
+
+    assert world.grid[5][5] == config.Tile.EMPTY
+    assert world.grid[5][6] == config.Tile.RIVER
+    assert world.grid[4][5] == config.Tile.BRIDGE
 
 
 def test_destroy_brick_clears_only_bricks():
