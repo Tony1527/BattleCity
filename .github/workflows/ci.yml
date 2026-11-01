@@ -1,12 +1,32 @@
-runs-on: windows-latest
-steps:
-  - uses: actions/checkout@v4
-  - uses: actions/setup-python@v5
-    with:
-      python-version: "3.13"
-  - run: pip install pygame-ce pyinstaller
-  - run: pyinstaller --noconfirm --clean --windowed --name BattleCity --add-data "assets;assets" main.py
-  - uses: actions/upload-artifact@v4
-    with:
-      name: BattleCity-windows
-      path: dist/BattleCity
+name: Build BattleCity
+
+# 触发条件：当推送到 main 分支或者提 PR 时触发，也允许手动触发
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # 允许在 Actions 页面手动点击运行
+
+# 核心层级：所有的任务都必须在 jobs 下面
+jobs:
+  build:
+    # runs-on 必须写在具体的 job 内部
+    runs-on: windows-latest
+    
+    # steps 也必须写在具体的 job 内部，且与 runs-on 同级
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          
+      - run: pip install pygame-ce pyinstaller
+      
+      - run: pyinstaller --noconfirm --clean --windowed --name BattleCity --add-data "assets;assets" main.py
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BattleCity-windows
+          path: dist/BattleCity
