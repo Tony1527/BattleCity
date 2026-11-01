@@ -169,7 +169,7 @@ class Enemy:
     def _behave(self, dt: float, world) -> None:
         if self.kind == "demolisher":
             self._behave_demolisher(dt, world)
-        elif self.kind in ("gunner", "elite"):
+        elif self.kind in ("gunner", "elite", "elite_x"):
             self._behave_gunner(dt, world)
         else:
             self._behave_tracker(dt, world)
@@ -529,6 +529,28 @@ class EliteEnemy(Enemy):
         ]
 
 
+class EliteXEnemy(EliteEnemy):
+    def __init__(
+        self,
+        pos: tuple[float, float] | pygame.Vector2,
+        direction: config.Direction = config.Direction.UP,
+        level_index: int = 0,
+        hp_mult: float = 1.0,
+        shield_mult: float = 1.0,
+        spec: config.EnemySpec | None = None,
+    ):
+        super().__init__(
+            pos,
+            direction=direction,
+            level_index=level_index,
+            hp_mult=hp_mult,
+            shield_mult=shield_mult,
+            spec=spec,
+        )
+        self.kind = "elite_x"
+        self.speed *= config.ELITE_X_SPEED_MULT
+
+
 def make_enemy(
     kind: str,
     tile: tuple[int, int],
@@ -540,6 +562,14 @@ def make_enemy(
     pos = tile_center(*tile)
     if kind == "elite":
         return EliteEnemy(
+            pos,
+            level_index=elite_level,
+            hp_mult=elite_hp_mult,
+            shield_mult=elite_shield_mult,
+            spec=spec,
+        )
+    if kind == "elite_x":
+        return EliteXEnemy(
             pos,
             level_index=elite_level,
             hp_mult=elite_hp_mult,

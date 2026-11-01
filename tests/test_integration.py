@@ -58,7 +58,10 @@ def test_all_eight_levels_construct_validate_and_update() -> None:
         assert len(world.grid) == config.GRID_ROWS
         assert all(len(row) == config.GRID_COLS for row in world.grid)
 
-        assert world.elite_target_count == config.ELITE_COUNTS[level_index]
+        expected_elites = config.ELITE_COUNTS[level_index]
+        if level_index in config.ELITE_X_LEVELS:
+            expected_elites += 1
+        assert world.elite_target_count == expected_elites
         assert world.elite_spawned_count == 1
         assert any(
             enemy.kind == "elite" and enemy.alive
@@ -96,9 +99,10 @@ def test_full_run_normal_and_hell_construct_all_levels() -> None:
                 else config.BASE_HP_NORMAL
             )
             assert validate_level(world.level)
-            assert (
-                world.elite_target_count == config.ELITE_COUNTS[level_index]
-            )
+            expected_elites = config.ELITE_COUNTS[level_index]
+            if level_index in config.ELITE_X_LEVELS:
+                expected_elites += 1
+            assert world.elite_target_count == expected_elites
             assert len(world.traps) == config.TRAP_COUNTS[level_index]
 
             for _ in range(120):

@@ -51,7 +51,10 @@ def test_level_start_sets_quota_spawn_settings_and_elite(level):
 
     elites = [enemy for enemy in world.enemies if isinstance(enemy, EliteEnemy)]
     assert len(elites) == 1
-    assert world.elite_target_count == config.ELITE_COUNTS[level]
+    expected_elites = config.ELITE_COUNTS[level]
+    if level in config.ELITE_X_LEVELS:
+        expected_elites += 1
+    assert world.elite_target_count == expected_elites
     assert world.elite_spawned_count == 1
 
 
@@ -124,7 +127,7 @@ def test_elite_level_spawns_one_elite_that_does_not_consume_quota():
 
     elites = [enemy for enemy in world.enemies if isinstance(enemy, EliteEnemy)]
     assert len(elites) == 1
-    assert world.elite_target_count == config.ELITE_COUNTS[3]
+    assert world.elite_target_count == config.ELITE_COUNTS[3] + 1
     assert world.elite_spawned_count == 1
     assert world.quota_remaining == starting_quota
 
@@ -305,7 +308,7 @@ def test_remaining_enemies_counts_living_pending_and_the_boss():
     dead.alive = False
     world.enemies = [alive_a, alive_b, dead]
 
-    assert world.remaining_enemies == 4
+    assert world.remaining_enemies == 5
 
     boss_world = wave_world(config.BOSS_LEVEL)
     boss_world.enemies = []
@@ -318,6 +321,7 @@ def test_clear_requires_zero_quota_and_no_living_enemies():
     world = wave_world(0)
     world.quota_remaining = 0
     world.spawn_quota = 0
+    world.elite_spawned_count = world.elite_target_count
     enemy = make_enemy("tracker", (5, 5))
     world.enemies = [enemy]
 

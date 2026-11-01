@@ -6,6 +6,7 @@ import pytest
 import config
 from game import boss as boss_module
 from game import i18n, render
+from game.enemies import make_enemy
 from game.hazards import Trap
 from game.pickups import Pickup
 from game.render import Renderer
@@ -797,3 +798,23 @@ def test_buff_chip_height_tracks_font_metrics(screen):
 def test_hud_has_five_cards_and_no_revive_slot(screen):
     renderer = render.Renderer(screen)
     assert len(renderer._hud_rects()) == 5
+
+
+def test_draw_world_uses_distinct_color_for_elite_x(screen):
+    world = World(0, seed=21)
+    elite_x = make_enemy("elite_x", (5, 5))
+    world.enemies = [elite_x]
+    renderer = render.Renderer(screen)
+
+    renderer.draw_world(world)
+
+    center = (
+        int(elite_x.pos.x),
+        int(elite_x.pos.y),
+    )
+    region = pygame.Rect(center[0] - 20, center[1] - 20, 40, 40)
+    colors = sampled_colors(screen, region, step=1)
+    assert any(
+        red > 200 and 100 < green < 210 and blue < 140
+        for red, green, blue in colors
+    )

@@ -43,6 +43,8 @@ _HOLO_EDGE = (160, 214, 245)
 _ENEMY_DEMOLISHER = (242, 112, 58)
 _ELITE_MAGENTA = (224, 96, 224)
 _ELITE_LIGHT = (255, 176, 255)
+_ELITE_X_BODY = (255, 128, 48)
+_ELITE_X_ACCENT = (255, 236, 150)
 _BOSS_PHASE_COLORS = {
     1: (232, 74, 74),
     2: (255, 146, 64),
@@ -1185,8 +1187,11 @@ class Renderer:
         for enemy in world.enemies:
             if not enemy.alive:
                 continue
-            elite = enemy.kind == "elite"
-            if elite:
+            elite = enemy.kind in ("elite", "elite_x")
+            if enemy.kind == "elite_x":
+                body = _ELITE_X_BODY
+                accent = _ELITE_X_ACCENT
+            elif elite:
                 body = _ELITE_MAGENTA
                 accent = _ELITE_LIGHT
             elif enemy.kind == "gunner":
@@ -1240,7 +1245,7 @@ class Renderer:
                         align="center",
                     )
             if (
-                enemy.kind == "elite"
+                enemy.kind in ("elite", "elite_x")
                 and getattr(enemy, "telegraph", 0.0) > 0.0
             ):
                 pending = getattr(enemy, "pending_spread", None)

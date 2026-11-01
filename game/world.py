@@ -80,6 +80,7 @@ class World:
         self.spawn_quota = 0
         self.spawn_timer = config.SPAWN_START_DELAY
         self.max_active = 0
+        self.elite_schedule: list[str] = []
         self.elite_target_count = 0
         self.elite_spawned_count = 0
         self.elite_spawn_timer = config.ELITE_SPAWN_INTERVAL
@@ -636,7 +637,7 @@ class World:
             tile = self._fallback_spawn_tile()
         if tile is None:
             return None
-        if kind == "elite":
+        if kind in ("elite", "elite_x"):
             spec = scaled_enemy_spec("gunner", self.difficulty)
             enemy = make_enemy(
                 kind,
@@ -999,9 +1000,12 @@ class World:
                     self.grid[ty][tx] = config.Tile.EMPTY
 
     def _start_level(self) -> None:
-        self.elite_target_count = _level_value(
-            config.ELITE_COUNTS, self.level_index
-        )
+        self.elite_schedule = [
+            "elite"
+        ] * _level_value(config.ELITE_COUNTS, self.level_index)
+        if self.level_index in config.ELITE_X_LEVELS:
+            self.elite_schedule.append("elite_x")
+        self.elite_target_count = len(self.elite_schedule)
         self.elite_spawned_count = 0
         self.elite_spawn_timer = config.ELITE_SPAWN_INTERVAL
 
@@ -1036,7 +1040,8 @@ class World:
             tile = self._fallback_spawn_tile()
         if tile is None:
             return None
-        enemy = self.spawn_enemy("elite", tile)
+        kind = self.elite_schedule[self.elite_spawned_count]
+        enemy = self.spawn_enemy(kind, tile)
         if enemy is not None:
             self.elite_spawned_count += 1
         return enemy
@@ -1045,7 +1050,7 @@ class World:
         return sum(
             1
             for enemy in self.enemies
-            if enemy.alive and enemy.kind == "elite"
+            if enemy.alive and enemy.kind in ("elite", "elite_x")
         )
 
     def _update_elite_spawning(self, dt: float) -> None:
