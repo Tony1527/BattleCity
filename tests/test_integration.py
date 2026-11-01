@@ -308,7 +308,7 @@ def test_requirements_and_readme_document_the_workflow() -> None:
         "每关都会出现精英敌人",
         "1 个 Boss 关",
         "最终 Boss",
-        "跳过该关升级",
+        "两名玩家每关都参与升级",
         "## 难度",
         "## 关卡与敌人",
         "## 地形、陷阱与补给",

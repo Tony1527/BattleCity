@@ -90,6 +90,7 @@ class PlayerStats:
     base_shield: int = 0
     grenade_split: int = 0
     laser_reflect: int = 0
+    reactive_armor_stacks: int = 0
 
     def clone(self) -> PlayerStats:
         return replace(self)
@@ -122,6 +123,10 @@ PLAYER_FIRE_INTERVAL = 0.35
 PLAYER_BULLET_SPEED = 400.0
 PLAYER_BULLET_DAMAGE = 1
 HIT_INVULN = 0.5
+REACTIVE_ARMOR_BASE_INTERVAL = 20.0
+REACTIVE_ARMOR_STEP = 2.0
+REACTIVE_ARMOR_MIN_INTERVAL = 4.0
+REACTIVE_ARMOR_DURATION = 1.0
 RESPAWN_DELAY = 3.0
 RESPAWN_INVULN = 2.0
 

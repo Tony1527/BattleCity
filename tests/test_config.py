@@ -99,6 +99,7 @@ def test_player_stats_defaults_match_spec():
     assert stats.base_shield == 0
     assert stats.grenade_split == 0
     assert stats.laser_reflect == 0
+    assert stats.reactive_armor_stacks == 0
 
 
 def test_player_stats_field_order_and_clone():
@@ -118,6 +119,7 @@ def test_player_stats_field_order_and_clone():
         "base_shield",
         "grenade_split",
         "laser_reflect",
+        "reactive_armor_stacks",
     ]
     assert [f.name for f in fields(config.PlayerStats)] == expected
 

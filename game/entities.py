@@ -115,6 +115,7 @@ class Player:
         self.immobilized = 0.0
         self.stim_timer = 0.0
         self.invincible_timer = 0.0
+        self.reactive_timer = self.reactive_armor_interval()
         self.damage_residual = 0.0
 
     @property
@@ -134,6 +135,16 @@ class Player:
     def center(self) -> pygame.Vector2:
         return pygame.Vector2(self.pos)
 
+    def reactive_armor_interval(self) -> float:
+        stacks = max(0, int(self.stats.reactive_armor_stacks))
+        if stacks <= 0:
+            return 0.0
+        return max(
+            config.REACTIVE_ARMOR_MIN_INTERVAL,
+            config.REACTIVE_ARMOR_BASE_INTERVAL
+            - config.REACTIVE_ARMOR_STEP * (stacks - 1),
+        )
+
     def update_timers(self, dt: float) -> None:
         self.invuln = max(0.0, self.invuln - dt)
         self.respawn_timer = max(0.0, self.respawn_timer - dt)
@@ -143,6 +154,16 @@ class Player:
         self.immobilized = max(0.0, self.immobilized - dt)
         self.stim_timer = max(0.0, self.stim_timer - dt)
         self.invincible_timer = max(0.0, self.invincible_timer - dt)
+        if self.alive:
+            interval = self.reactive_armor_interval()
+            if interval > 0.0:
+                self.reactive_timer -= dt
+                if self.reactive_timer <= 0.0:
+                    self.invincible_timer = max(
+                        self.invincible_timer,
+                        config.REACTIVE_ARMOR_DURATION,
+                    )
+                    self.reactive_timer = interval
 
     def can_shoot(self) -> bool:
         return (
@@ -187,4 +208,5 @@ class Player:
         self.invuln = config.RESPAWN_INVULN
         self.respawn_timer = 0.0
         self.immobilized = 0.0
+        self.reactive_timer = self.reactive_armor_interval()
         self.damage_residual = 0.0

@@ -239,3 +239,30 @@ def test_player_can_shoot_only_when_alive_and_fire_timer_elapsed():
 
     player.alive = False
     assert player.can_shoot() is False
+
+
+def test_reactive_armor_interval_scales_and_floors_at_four_seconds():
+    stats = config.PlayerStats(reactive_armor_stacks=1)
+    player = entities.Player(0, (120, 240), stats=stats)
+    assert player.reactive_armor_interval() == pytest.approx(20.0)
+
+    stats.reactive_armor_stacks = 2
+    assert player.reactive_armor_interval() == pytest.approx(18.0)
+
+    stats.reactive_armor_stacks = 9
+    assert player.reactive_armor_interval() == pytest.approx(4.0)
+
+    stats.reactive_armor_stacks = 20
+    assert player.reactive_armor_interval() == pytest.approx(4.0)
+
+
+def test_reactive_armor_grants_one_second_of_invincibility():
+    stats = config.PlayerStats(reactive_armor_stacks=1)
+    player = entities.Player(0, (120, 240), stats=stats)
+
+    player.update_timers(19.9)
+    assert player.invincible_timer == 0.0
+
+    player.update_timers(0.2)
+    assert player.invincible_timer == pytest.approx(1.0)
+    assert player.take_damage(1) is False

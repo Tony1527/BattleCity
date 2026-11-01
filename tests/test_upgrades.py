@@ -49,7 +49,7 @@ def test_upgrade_dataclass_is_frozen_and_well_formed():
         assert entry.op in ("add", "mul")
         assert entry.stat in stat_names
         assert entry.max_stacks >= 2
-        assert 2 <= entry.max_stacks <= 4
+        assert 2 <= entry.max_stacks <= 9
         assert entry.roles
         assert entry.roles <= frozenset({"p1", "p2"})
 
@@ -185,3 +185,12 @@ def test_roll_upgrades_filters_offers_by_player_role():
     assert {offer.id for offer in shared} == {
         upgrade.id for upgrade in upgrades.UPGRADE_POOL
     }
+
+
+def test_reactive_armor_stacks_to_nine_and_floors_at_four_seconds():
+    stats = config.PlayerStats()
+    levels = {}
+    for _ in range(9):
+        assert upgrades.apply_upgrade(stats, levels, "reactive_armor") is True
+    assert stats.reactive_armor_stacks == 9
+    assert upgrades.apply_upgrade(stats, levels, "reactive_armor") is False
